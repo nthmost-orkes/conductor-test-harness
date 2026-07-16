@@ -144,7 +144,7 @@ issues; SDK repo for SDK-side issues).
 | Java (`java-sdk/`) | `java-sdk/STATIC_ANALYSIS.md` | `java-sdk/live_test.sh` | ✅ complete — 6 issues filed (#130–#135); 1 false positive retracted |
 | JavaScript (`javascript-sdk/`) | `javascript-sdk/STATIC_ANALYSIS.md` | `javascript-sdk/live_test.sh` | ✅ complete — 6 issues filed (#135–#140) |
 | Go (`go-sdk/`) | `go-sdk/STATIC_ANALYSIS.md` | `go-sdk/live_test.sh` | ✅ complete — 4 issues filed (#262–#265) |
-| C# (`csharp-sdk/`) | — | — | not started |
+| C# (`csharp-sdk/`) | `csharp-sdk/STATIC_ANALYSIS.md` | (no runtime available) | ✅ complete — 4 issues filed (#158–#161); cross-validated against confirmed JS/Go findings |
 
 ---
 
