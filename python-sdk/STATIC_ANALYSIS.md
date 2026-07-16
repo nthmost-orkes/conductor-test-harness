@@ -237,7 +237,68 @@ values so users can construct raw WorkflowTask dicts with the correct type strin
 
 ---
 
-## Live Test Status
+---
 
-Not yet run. See `../SDK_ANALYSIS_PROCEDURE.md` Phase 2 for procedure.
-When run, results will be added here under "Live Test Results."
+### FINDING-7 (NEW from live test): ConductorWorkflow requires a live executor at construction time
+
+**Severity:** MEDIUM
+**SDK file:** `src/conductor/client/workflow/conductor_workflow.py:27`
+
+**What the issue is:**
+`ConductorWorkflow.__init__()` takes `executor: WorkflowExecutor` as a mandatory
+first argument. This means you cannot construct a workflow definition object
+without first creating a live server connection. There is no way to build and
+serialize a workflow definition offline (e.g. for unit tests, for storing as JSON,
+or for code generation) without providing credentials and a server URL.
+
+**Impact:** Workflow definitions cannot be unit-tested without a live server.
+Building definitions in library code requires passing an executor through all
+helper functions, coupling definition logic to connection management.
+
+**Fix:** Make `executor` optional (`executor: Optional[WorkflowExecutor] = None`)
+and raise only when an executor-requiring operation (`.register()`, `.start_workflow()`)
+is called on a workflow that has no executor set.
+
+---
+
+## Live Test Results
+
+Run date: 2026-07-16, server: `http://loki.local:8080` (Conductor 3.32.0-rc.9)
+Script: `python-sdk/live_test.py`
+
+| Test | Result | Note |
+|------|--------|------|
+| set_variable | ✅ PASS | |
+| inline | ✅ PASS | |
+| json_jq | ✅ PASS | |
+| switch_value_param | ✅ PASS | |
+| do_while_loop | ✅ PASS | |
+| fork_join | ✅ PASS | |
+| terminate | ✅ PASS | status=TERMINATED as expected |
+| http | ✅ PASS | |
+| wait_for_duration | ✅ PASS | |
+| wait_until_subclass | ✅ PASS | `WaitUntilTask` correct |
+| wait_base_class_bug | 🐛 STATIC_BUG [FINDING-1] | `WaitTask(wait_until=...)` stays RUNNING — wrong key confirmed |
+| lambda_no_builder | 🐛 STATIC_BUG [FINDING-2] | No `LambdaTask` class; server runs LAMBDA fine via raw dict |
+| noop | 🐛 STATIC_BUG [FINDING-5] | `TaskType.NOOP` absent; server runs NOOP fine via raw dict |
+| dynamic_fork_deprecated_field | ❌ FAIL (NEW) | 400 Bad Request — server **rejects** `dynamicForkJoinTasksParam`; field has been removed |
+| exclusive_join_no_builder | ✅ PASS [FINDING-4] | EXCLUSIVE_JOIN runs fine via raw `WorkflowTask`; SDK builder still missing |
+
+**Summary: 11/15 PASS · 3 STATIC_BUG confirmed · 1 new FAIL discovered**
+
+### FINDING-3 UPGRADED: FORK_JOIN_DYNAMIC deprecated field is now REJECTED by server
+
+The static analysis (FINDING-3) flagged `DynamicForkTask` as setting the deprecated
+`dynamicForkJoinTasksParam` field. Live testing confirms the server now **rejects**
+this field at registration with HTTP 400:
+
+```
+"dynamicForkJoinTasksParam or combination of dynamicForkTasksInputParamName and
+dynamicForkTasksParam can be used for taskType: FORK_JOIN_DYNAMIC"
+```
+
+Despite the phrasing ("or combination"), `dynamicForkJoinTasksParam` alone is
+**not** accepted. `DynamicForkTask` is broken on the current server — any workflow
+using it via the SDK will fail to register.
+
+**Severity upgrade: HIGH → CRITICAL** (task cannot be used at all via SDK).
