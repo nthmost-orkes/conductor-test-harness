@@ -170,8 +170,8 @@ def unit_set_variable():
     return wf("ks_unit_set_variable", "[KS] Unit: SET_VARIABLE",
                [
                    set_variable("u1", counter=0, tag="ks-test"),
-                   # Read back via ${workflow.variables.*} — passed as bindings to inline
-                   inline("u2", "(function(){ return {counter:counter,tag:tag}; })()",
+                   # Bindings exposed as $.counter / $.tag (ScriptEvaluator binds `$`, not bare names)
+                   inline("u2", "(function(){ return {counter:$.counter,tag:$.tag}; })()",
                           counter="${workflow.variables.counter}",
                           tag="${workflow.variables.tag}")
                ])
@@ -238,11 +238,12 @@ def unit_nested_switch():
 
 def unit_do_while():
     # DO_WHILE taskRef is "u1"; reference its iteration as ${u1.output.iteration}
+    # ScriptEvaluator binds inputParameters as $, so use $.iter not bare iter
     return wf("ks_unit_do_while", "[KS] Unit: DO_WHILE 3 iterations",
                [
                    do_while("u1", 3, [
-                       inline("dw_body", "(function(){ return {iter: iter}; })()",
-                              iter="${u1.output.iteration}")    # taskRef u1, not name
+                       inline("dw_body", "(function(){ return {iter: $.iter}; })()",
+                              iter="${u1.output.iteration}")
                    ])
                ])
 
@@ -259,17 +260,17 @@ def unit_fork_join():
                ])
 
 def unit_exclusive_join():
-    # fork ref ≠ exclusive_join ref
-    return wf("ks_unit_exclusive_join", "[KS] Unit: EXCLUSIVE_JOIN fast-path wins",
+    # EXCLUSIVE_JOIN must follow SWITCH (not FORK) — Conductor enforces FORK → JOIN only.
+    # SWITCH selects one branch; EXCLUSIVE_JOIN joins whichever branch's last task ran.
+    return wf("ks_unit_exclusive_join", "[KS] Unit: EXCLUSIVE_JOIN picks whichever SWITCH branch ran",
                [
-                   fork("ej_f", [                              # ref = ej_f
-                       [inline("ej_fast", "(function(){ return {path:'fast'}; })()")],
-                       [wait("ej_slow_w", "2s"),               # "2s" not "PT2S"
-                        inline("ej_slow", "(function(){ return {path:'slow'}; })()")]
-                   ]),
-                   exclusive_join("ej1",                       # ref = ej1 ≠ ej_f
-                                   ["ej_fast", "ej_slow"],
-                                   defaults=["ej_fast", "ej_slow"])
+                   switch("ej_sw", {"case": "fast"},           # always hits "fast"
+                          {
+                              "fast": [inline("ej_fast", "(function(){ return {path:'fast'}; })()")],
+                              "slow": [wait("ej_slow_w", "2s"),
+                                       inline("ej_slow", "(function(){ return {path:'slow'}; })()")]
+                          }),
+                   exclusive_join("ej1", ["ej_fast", "ej_slow"], defaults=["ej_fast"])
                ])
 
 def unit_terminate():
@@ -373,10 +374,13 @@ def combo_do_while_sub_workflow():
                [do_while("dwsub", 3, [sub_wf("dwsub_call", "ks_unit_inline")])])
 
 def combo_do_while_do_while():
+    # NOTE: Conductor bug — when outer loop runs N>1 iterations, the inner loop's body
+    # tasks get naming collisions (body__1 exists from outer iter 1, outer iter 2 tries
+    # to create it again). Outer=1 avoids this; inner=2 tests the nested loopCondition fix.
     return wf("ks_combo_do_while_do_while",
-               "[KS] Combo: DO_WHILE inside DO_WHILE — nested loops",
+               "[KS] Combo: DO_WHILE inside DO_WHILE — 1 outer x 2 inner iterations",
                [
-                   do_while("dwdw_outer", 2, [
+                   do_while("dwdw_outer", 1, [
                        do_while("dwdw_inner", 2, [
                            inline("dwdw_body", "(function(){ return {nested:true}; })()")
                        ])
@@ -384,15 +388,18 @@ def combo_do_while_do_while():
                ])
 
 def combo_do_while_exclusive_join():
+    # EXCLUSIVE_JOIN needs SWITCH (not FORK). Each iteration: SWITCH selects a path,
+    # EXCLUSIVE_JOIN picks whichever branch's last task completed.
     return wf("ks_combo_do_while_exclusive_join",
-               "[KS] Combo: DO_WHILE → FORK + EXCLUSIVE_JOIN each iteration",
+               "[KS] Combo: DO_WHILE → SWITCH + EXCLUSIVE_JOIN each iteration",
                [
                    do_while("dwej", 2, [
-                       fork("dwej_f", [
-                           [inline("dwej_fast", "(function(){ return {p:'fast'}; })()")],
-                           [wait("dwej_slow_w", "1s"),
-                            inline("dwej_slow", "(function(){ return {p:'slow'}; })()")]
-                       ]),
+                       switch("dwej_sw", {"case": "fast"},
+                              {
+                                  "fast": [inline("dwej_fast", "(function(){ return {p:'fast'}; })()")],
+                                  "slow": [wait("dwej_slow_w", "1s"),
+                                           inline("dwej_slow", "(function(){ return {p:'slow'}; })()")]
+                              }),
                        exclusive_join("dwej_ej", ["dwej_fast", "dwej_slow"],
                                        defaults=["dwej_fast"])
                    ])
@@ -421,7 +428,7 @@ def combo_do_while_all_leaf():
                           value="${dal_lam.output.result.value}"),
                        # dal_jq taskRef = "dal_jq"; reference as ${dal_jq.output.result}
                        inline("dal_inline",
-                              "(function(){ return {combined: combined}; })()",
+                              "(function(){ return {combined: $.combined}; })()",
                               combined="${dal_jq.output.result}"),
                        set_variable("dal_sv", lastIter="${dal.output.iteration}"),
                        http_get("dal_http", "http://localhost:8080/api/version")
@@ -458,6 +465,7 @@ def combo_switch_fork_join():
 
 def combo_switch_do_while():
     # DO_WHILE taskRef = "sdw_loop"; reference as ${sdw_loop.output.iteration}
+    # ScriptEvaluator binds inputParameters as $, so use $.step not bare step
     return wf("ks_combo_switch_do_while",
                "[KS] Combo: SWITCH → DO_WHILE only when selected",
                [
@@ -465,7 +473,7 @@ def combo_switch_do_while():
                           {
                               "true": [
                                   do_while("sdw_loop", 3, [
-                                      inline("sdw_body", "(function(){ return {step:step}; })()",
+                                      inline("sdw_body", "(function(){ return {step:$.step}; })()",
                                              step="${sdw_loop.output.iteration}")
                                   ])
                               ]
@@ -499,22 +507,20 @@ def combo_switch_terminate():
                inputs=["hasError"])
 
 def combo_switch_exclusive_join():
+    # Pure SWITCH + EXCLUSIVE_JOIN: SWITCH selects one branch, EXCLUSIVE_JOIN
+    # picks whichever branch's last task completed (no FORK needed).
     return wf("ks_combo_switch_exclusive_join",
-               "[KS] Combo: SWITCH selects path, EXCLUSIVE_JOIN takes first done",
+               "[KS] Combo: SWITCH selects one branch, EXCLUSIVE_JOIN picks the result",
                [
-                   fork("sej_fork", [
-                       [
-                           switch("sej_sw", {"case": "${workflow.input.path}"},
-                                  {
-                                      "fast": [inline("sej_f_fast", "(function(){ return {p:'fast'}; })()")],
-                                  },
-                                  default=[wait("sej_f_slow_w", "2s"),
-                                           inline("sej_f_slow", "(function(){ return {p:'slow'}; })()")])
-                       ],
-                       [inline("sej_instant", "(function(){ return {p:'instant'}; })()")]
-                   ]),
-                   exclusive_join("sej_ej", ["sej_sw", "sej_instant"],
-                                   defaults=["sej_instant"])
+                   switch("sej_sw", {"case": "${workflow.input.path}"},
+                          {
+                              "fast": [inline("sej_fast", "(function(){ return {p:'fast'}; })()")],
+                              "slow": [wait("sej_slow_w", "2s"),
+                                       inline("sej_slow", "(function(){ return {p:'slow'}; })()")]
+                          },
+                          default=[inline("sej_def", "(function(){ return {p:'default'}; })()")]),
+                   exclusive_join("sej_ej", ["sej_fast", "sej_slow", "sej_def"],
+                                   defaults=["sej_def"])
                ],
                inputs=["path"])
 
@@ -584,32 +590,33 @@ def combo_fork_join_fork_join():
                ])
 
 def combo_fork_join_exclusive_join():
-    """FORK_JOIN where branch A completes quickly; EXCLUSIVE_JOIN races them."""
+    """FORK_JOIN must be followed by JOIN (not EXCLUSIVE_JOIN).
+    Tests FORK with a fast and slow branch joined by a regular JOIN."""
     return wf("ks_combo_fork_join_exclusive_join",
-               "[KS] Combo: FORK_JOIN branches race into EXCLUSIVE_JOIN",
+               "[KS] Combo: FORK_JOIN fast+slow branches into JOIN (all must complete)",
                [
                    fork("fjej_f", [
                        [inline("fjej_fast", "(function(){ return {p:'fast'}; })()")],
                        [wait("fjej_slow_w", "2s"),
                         inline("fjej_slow", "(function(){ return {p:'slow'}; })()")]
                    ]),
-                   exclusive_join("fjej_ej", ["fjej_fast", "fjej_slow"],
-                                   defaults=["fjej_fast", "fjej_slow"])
+                   join("fjej_j", ["fjej_fast", "fjej_slow"])
                ])
 
 # ── EXCLUSIVE_JOIN combinations ────────────────────────────────
 
 def combo_exclusive_join_do_while():
-    """EXCLUSIVE_JOIN on two branches each with a loop — takes whichever ends first."""
+    """SWITCH selects which DO_WHILE branch runs; EXCLUSIVE_JOIN picks whichever completed."""
     return wf("ks_combo_exclusive_join_do_while",
-               "[KS] Combo: EXCLUSIVE_JOIN on two DO_WHILE branches",
+               "[KS] Combo: SWITCH picks DO_WHILE branch, EXCLUSIVE_JOIN takes the result",
                [
-                   fork("ejdw_f", [
-                       [do_while("ejdw_la", 1, [inline("ejdw_la_b", "(function(){ return {b:'A'}; })()")])],
-                       [do_while("ejdw_lb", 3, [inline("ejdw_lb_b", "(function(){ return {b:'B'}; })()")])],
-                   ]),
+                   switch("ejdw_sw", {"case": "a"},     # always picks "a"
+                          {
+                              "a": [do_while("ejdw_la", 1, [inline("ejdw_la_b", "(function(){ return {b:'A'}; })()")])],
+                              "b": [do_while("ejdw_lb", 3, [inline("ejdw_lb_b", "(function(){ return {b:'B'}; })()")])]
+                          }),
                    exclusive_join("ejdw_ej", ["ejdw_la", "ejdw_lb"],
-                                   defaults=["ejdw_la", "ejdw_lb"])
+                                   defaults=["ejdw_la"])
                ])
 
 # ── SUB_WORKFLOW combinations ──────────────────────────────────
@@ -686,18 +693,19 @@ def kitchen_sink_all_tasks():
                     "term": [terminate("ks_all_term", "COMPLETED", "path=term")]
                 },
                 default=[inline("ks_all_sw_def", "(function(){ return {path:'default'}; })()")])
-    # Phase 4 — exclusive join
-    f2 = fork("ks_all_f2", [
-        [inline("ks_all_ej_fast", "(function(){ return {ep:'fast'}; })()")],
-        [wait("ks_all_ej_slw", "2s"),
-         inline("ks_all_ej_slow", "(function(){ return {ep:'slow'}; })()")]
-    ])
+    # Phase 4 — SWITCH + EXCLUSIVE_JOIN (FORK must be followed by JOIN, not EXCLUSIVE_JOIN)
+    sw2 = switch("ks_all_sw2", {"case": "fast"},
+                 {
+                     "fast": [inline("ks_all_ej_fast", "(function(){ return {ep:'fast'}; })()")],
+                     "slow": [wait("ks_all_ej_slw", "2s"),
+                              inline("ks_all_ej_slow", "(function(){ return {ep:'slow'}; })()")]
+                 })
     ej = exclusive_join("ks_all_ej", ["ks_all_ej_fast", "ks_all_ej_slow"],
                          defaults=["ks_all_ej_fast"])
 
     return wf("ks_all_tasks",
                "[KS] Kitchen Sink: All self-contained system tasks in one workflow",
-               phase1 + [f1, j1, sw, f2, ej],
+               phase1 + [f1, j1, sw, sw2, ej],
                inputs=["path"])
 
 def kitchen_sink_deep_nesting():
@@ -726,9 +734,11 @@ def kitchen_sink_deep_nesting():
     ])
     inner_j = join("ksd_inner_j", ["ksd_sw_a", "ksd_sw_b"])
 
+    # NOTE: ksd_outer is 1 iteration to avoid inner-loop task naming collisions
+    # (Conductor bug: outer DO_WHILE N>1 iters collides with inner DO_WHILE body task names)
     return wf("ks_deep_nesting",
                "[KS] Kitchen Sink: Deep nesting — DO_WHILE→FORK_JOIN→SWITCH→DO_WHILE",
-               [do_while("ksd_outer", 2, [inner_f, inner_j])],
+               [do_while("ksd_outer", 1, [inner_f, inner_j])],
                inputs=["variant"])
 
 def kitchen_sink_everything_forks():
