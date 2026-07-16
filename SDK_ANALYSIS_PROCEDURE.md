@@ -140,8 +140,8 @@ issues; SDK repo for SDK-side issues).
 
 | SDK | Static analysis | Live test | Status |
 |-----|----------------|-----------|--------|
-| Python (`python-sdk/`) | `python-sdk/STATIC_ANALYSIS.md` | — | static done; live pending |
-| Java (`java-sdk/`) | `java-sdk/STATIC_ANALYSIS.md` | — | static done; live pending |
+| Python (`python-sdk/`) | `python-sdk/STATIC_ANALYSIS.md` | `python-sdk/live_test.py` | ✅ complete — 6 issues filed (#426–#432) |
+| Java (`java-sdk/`) | `java-sdk/STATIC_ANALYSIS.md` | `java-sdk/live_test.sh` | ✅ complete — 6 issues filed (#130–#135); 1 false positive retracted |
 | JavaScript (`javascript-sdk/`) | — | — | not started |
 | Go (`go-sdk/`) | — | — | not started |
 | C# (`csharp-sdk/`) | — | — | not started |

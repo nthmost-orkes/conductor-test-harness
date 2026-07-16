@@ -42,47 +42,19 @@ Builder classes live in:
 
 ## Findings
 
-### FINDING-1: ForkJoin — `joinOn()` produces `List<String[]>` instead of `List<String>`
+### ~~FINDING-1~~: ForkJoin — `joinOn()` (FALSE POSITIVE — retracted)
 
-**Severity:** CRITICAL
-**Task type:** FORK_JOIN
-**SDK file:** `ForkJoin.java:119`
-**Server file:** `WorkflowTask.java` — `joinOn` field is `List<String>`
+**Status:** FALSE POSITIVE — retracted after live verification.
 
-**What the server expects:**
-`WorkflowTask.joinOn` must be `List<String>` — a flat list of task reference name strings.
+The static analysis originally claimed `List.of(this.join.getJoinOn())` at `ForkJoin.java:119`
+would produce `List<String[]>` instead of `List<String>`. This is **incorrect**.
 
-**What the SDK provides:**
-When the user calls `forkJoin.joinOn("task_a", "task_b")`, an inner `Join` object is
-created storing `String[] joinOn = {"task_a", "task_b"}`. In `updateWorkflowTask()`:
+Java's target-type inference resolves the ambiguity: because `setJoinOn(List<String>)` has
+a typed parameter, the compiler infers `E = String` for the `List.of()` call and uses the
+varargs overload `List.of(E... elements)`, which correctly unpacks the `String[]` into
+individual elements. Live verification confirmed this with a direct Java test.
 
-```java
-// ForkJoin.java line 119
-fork.setJoinOn(List.of(this.join.getJoinOn()));
-```
-
-`this.join.getJoinOn()` returns `String[]`. `List.of(T... elements)` is a varargs
-method — Java infers `T = String[]` and wraps the entire array as a single element,
-producing `List<String[]>` with one element (the array), not `List<String>`.
-
-When Jackson serializes this, `joinOn` becomes `[["task_a", "task_b"]]` (nested array)
-instead of `["task_a", "task_b"]`. The server receives the wrong structure and join
-logic fails.
-
-**Impact:**
-Any `ForkJoin` workflow that uses `.joinOn()` to specify which tasks to wait on will
-silently produce a malformed definition. The auto-detected join (when `joinOn` is not
-called) is unaffected — it builds `joinOnTaskRefNames` as a proper `ArrayList<String>`
-on lines 106-121.
-
-**Fix:**
-```java
-// line 119 — replace:
-fork.setJoinOn(List.of(this.join.getJoinOn()));
-// with:
-fork.setJoinOn(Arrays.asList(this.join.getJoinOn()));
-```
-`Arrays` is already imported (line 16).
+The `ForkJoin.joinOn()` implementation is correct.
 
 ---
 
@@ -265,12 +237,25 @@ Add the four missing values to the SDK `TaskType` enum to match the server.
 
 | Severity | Count | Findings |
 |----------|-------|---------|
-| CRITICAL | 1 | FINDING-1: ForkJoin `List.of(String[])` type error |
+| ~~CRITICAL~~ | ~~1~~ | ~~FINDING-1: ForkJoin `List.of(String[])` — FALSE POSITIVE~~ |
 | HIGH | 2 | FINDING-2: NOOP no builder; FINDING-3: START_WORKFLOW no builder |
 | MEDIUM | 4 | FINDING-4: HUMAN no builder; FINDING-5: EXCLUSIVE_JOIN no builder; FINDING-6: Http connectionTimeout; FINDING-7: 4 missing enum values |
 
 ---
 
-## Live Test Status
+## Live Test Results
 
-Not yet run. See `../SDK_ANALYSIS_PROCEDURE.md` Phase 2 for procedure.
+Run date: 2026-07-16, server: `http://loki.local:8080` (Conductor 3.32.0-rc.9)
+Script: `java-sdk/live_test.sh`
+
+| Finding | Result | Note |
+|---------|--------|------|
+| FINDING-1: ForkJoin.joinOn() | FALSE POSITIVE | `List.of(String[])` correctly uses target-type inference; no bug |
+| FINDING-2: NOOP no builder | 🐛 CONFIRMED | Server accepts NOOP and completes — SDK gap only |
+| FINDING-3: START_WORKFLOW no builder | 🐛 CONFIRMED | Server accepts START_WORKFLOW and completes — SDK gap only |
+| FINDING-4: HUMAN no builder | 🐛 CONFIRMED | Server accepts HUMAN (RUNNING, awaiting signal) — SDK gap only |
+| FINDING-5: EXCLUSIVE_JOIN no builder | 🐛 CONFIRMED | Server accepts EXCLUSIVE_JOIN and completes — SDK gap only |
+| FINDING-6: Http no connectionTimeout() | 🐛 CONFIRMED | Server accepts connectionTimeOut field — SDK fluent method missing |
+| FINDING-7: Missing enum values | 🐛 CONFIRMED | Server accepts AGENT task type — SDK enum missing 4 values |
+
+**Summary: 6 static findings confirmed · 1 false positive retracted**
