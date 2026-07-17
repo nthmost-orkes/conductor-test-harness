@@ -1,0 +1,7 @@
+# Battery test run artifacts — generated, not source-controlled
+server/*/kitchen-sink/battery_report_*.json
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
