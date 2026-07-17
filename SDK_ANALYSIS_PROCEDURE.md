@@ -84,13 +84,13 @@ that uses **only the SDK** (no raw JSON/HTTP) to:
 4. Poll for terminal status
 5. Assert expected output
 
-Pattern mirrors `kitchen-sink/generate_and_register.py` (which uses raw JSON)
+Pattern mirrors `server/<version>/kitchen-sink/generate_and_register.py` (which uses raw JSON)
 but uses the SDK's native types instead.
 
 ### Step 2 — Run against loki
 
 ```shell
-CONDUCTOR_SERVER=http://loki.local:8080 python python-sdk/build_system_tasks.py
+CONDUCTOR_SERVER=http://loki.local:8080 python sdk/python/<server-version>/build_system_tasks.py
 ```
 
 Capture: registration errors, runtime failures, unexpected task statuses,
@@ -140,12 +140,12 @@ issues; SDK repo for SDK-side issues).
 
 | SDK | Static analysis | Live test | Status |
 |-----|----------------|-----------|--------|
-| Python (`python-sdk/`) | `python-sdk/STATIC_ANALYSIS.md` | `python-sdk/live_test.py` | ✅ complete — 6 issues filed (#426–#432) |
-| Java (`java-sdk/`) | `java-sdk/STATIC_ANALYSIS.md` | `java-sdk/live_test.sh` | ✅ complete — 6 issues filed (#130–#135); 1 false positive retracted |
-| JavaScript (`javascript-sdk/`) | `javascript-sdk/STATIC_ANALYSIS.md` | `javascript-sdk/live_test.sh` | ✅ complete — 6 issues filed (#135–#140) |
-| Go (`go-sdk/`) | `go-sdk/STATIC_ANALYSIS.md` | `go-sdk/live_test.sh` | ✅ complete — 4 issues filed (#262–#265) |
-| C# (`csharp-sdk/`) | `csharp-sdk/STATIC_ANALYSIS.md` | (no runtime available) | ✅ complete — 4 issues filed (#158–#161); cross-validated against confirmed JS/Go findings |
-| Ruby (`ruby-sdk/`) | `ruby-sdk/STATIC_ANALYSIS.md` | (no runtime available) | ✅ complete — 3 issues filed (#23–#25); cross-validated against confirmed findings |
+| Python (`sdk/python/3.32.0-rc.9/`) | `sdk/python/3.32.0-rc.9/STATIC_ANALYSIS.md` | `sdk/python/3.32.0-rc.9/live_test.py` | ✅ complete — 7 issues filed (#426–#432) |
+| Java (`sdk/java/3.32.0-rc.9/`) | `sdk/java/3.32.0-rc.9/STATIC_ANALYSIS.md` | `sdk/java/3.32.0-rc.9/live_test.sh` | ✅ complete — 6 issues filed (#130–#135); 1 false positive retracted |
+| JavaScript (`sdk/javascript/3.32.0-rc.9/`) | `sdk/javascript/3.32.0-rc.9/STATIC_ANALYSIS.md` | `sdk/javascript/3.32.0-rc.9/live_test.sh` | ✅ complete — 6 issues filed (#135–#140) |
+| Go (`sdk/go/3.32.0-rc.9/`) | `sdk/go/3.32.0-rc.9/STATIC_ANALYSIS.md` | `sdk/go/3.32.0-rc.9/live_test.sh` | ✅ complete — 4 issues filed (#262–#265) |
+| C# (`sdk/csharp/3.32.0-rc.9/`) | `sdk/csharp/3.32.0-rc.9/STATIC_ANALYSIS.md` | (no runtime available) | ✅ complete — 4 issues filed (#158–#161); cross-validated against confirmed JS/Go findings |
+| Ruby (`sdk/ruby/3.32.0-rc.9/`) | `sdk/ruby/3.32.0-rc.9/STATIC_ANALYSIS.md` | (no runtime available) | ✅ complete — 3 issues filed (#23–#25); cross-validated against confirmed findings |
 
 ---
 

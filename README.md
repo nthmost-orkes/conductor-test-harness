@@ -13,21 +13,25 @@ Live test server: `http://loki.local:8080`
 
 ```
 conductor-test-harness/
-├── kitchen-sink/           Raw JSON battery — tests all system task types via curl
-├── python-sdk/             Python SDK analysis, live test, issues
-├── java-sdk/               Java SDK analysis, live test, issues
-├── javascript-sdk/         JavaScript SDK analysis, live test, issues
-├── go-sdk/                 Go SDK analysis, live test, issues
-├── csharp-sdk/             C# SDK analysis, issues
-├── ruby-sdk/               Ruby SDK analysis, issues
-├── SDK_ANALYSIS_PROCEDURE.md   Full methodology (read this first)
-└── BUGS.md                 Server-side bugs found during testing
+├── README.md
+├── SDK_ANALYSIS_PROCEDURE.md
+├── server/
+│   └── 3.32.0-rc.9/
+│       ├── BUGS.md             Server-side bugs found against this version
+│       └── kitchen-sink/       Raw JSON battery — tests all system task types via curl
+└── sdk/
+    ├── python/3.32.0-rc.9/
+    ├── java/3.32.0-rc.9/
+    ├── javascript/3.32.0-rc.9/
+    ├── go/3.32.0-rc.9/
+    ├── csharp/3.32.0-rc.9/
+    └── ruby/3.32.0-rc.9/
 ```
 
-Each SDK directory contains:
+Each `sdk/<language>/<server-version>/` directory contains:
 - `STATIC_ANALYSIS.md` — task type coverage table + per-finding writeup
 - `ISSUES.md` — punch list linking to filed GitHub issues
-- `live_test.sh` (or `live_test.py`) — bash/Python script to confirm findings against the live server
+- `live_test.sh` (or `live_test.py`) — script to confirm findings against the live server
 
 ---
 
@@ -81,12 +85,12 @@ All issues mention "Conductor OSS 3.32.0-rc.9" as the tested baseline.
 
 | SDK | Issues filed | Status | Key findings |
 |-----|-------------|--------|-------------|
-| [Python](python-sdk/ISSUES.md) | [#426–#432](https://github.com/conductor-oss/python-sdk/issues) (7) | ✅ complete | `wait_until` wrong key, deprecated dynamic fork field, missing NOOP/EXCLUSIVE_JOIN/AGENT |
-| [Java](java-sdk/ISSUES.md) | [#130–#135](https://github.com/conductor-oss/conductor-java-sdk/issues) (6) | ✅ complete | NOOP/START_WORKFLOW/HUMAN/EXCLUSIVE_JOIN no builder, Http no fluent timeout, TaskType missing AGENT family; 1 false positive retracted |
-| [JavaScript](javascript-sdk/ISSUES.md) | [#135–#140](https://github.com/conductor-oss/javascript-sdk/issues) (6) | ✅ complete | `forkTaskJoin()` empty joinOn (live-confirmed), NOOP missing, EXCLUSIVE_JOIN no builder, `readTimeOut` wrong type, SWITCH no JS evaluator, 4 missing enum values |
-| [Go](go-sdk/ISSUES.md) | [#262–#265](https://github.com/conductor-oss/go-sdk/issues) (4) | ✅ complete | HTTP wrong JSON field names + int16 overflow, ForkTask empty joinOn (live-confirmed), DynamicForkTask ignores stored join, 6 missing TaskType constants |
-| [C#](csharp-sdk/ISSUES.md) | [#158–#161](https://github.com/conductor-oss/csharp-sdk/issues) (4) | ✅ complete | DynamicFork.Join empty joinOn, deprecated field, missing NOOP/EXCLUSIVE_JOIN/START_WORKFLOW builders, missing AGENT enum values |
-| [Ruby](ruby-sdk/ISSUES.md) | [#23–#25](https://github.com/conductor-oss/ruby-sdk/issues) (3) | ✅ complete | Deprecated dynamic fork field, SWITCH JS evaluator hardcoded, missing NOOP/EXCLUSIVE_JOIN DSL + AGENT constants |
+| [Python](sdk/python/3.32.0-rc.9/ISSUES.md) | [#426–#432](https://github.com/conductor-oss/python-sdk/issues) (7) | ✅ complete | `wait_until` wrong key, deprecated dynamic fork field, missing NOOP/EXCLUSIVE_JOIN/AGENT |
+| [Java](sdk/java/3.32.0-rc.9/ISSUES.md) | [#130–#135](https://github.com/conductor-oss/conductor-java-sdk/issues) (6) | ✅ complete | NOOP/START_WORKFLOW/HUMAN/EXCLUSIVE_JOIN no builder, Http no fluent timeout, TaskType missing AGENT family; 1 false positive retracted |
+| [JavaScript](sdk/javascript/3.32.0-rc.9/ISSUES.md) | [#135–#140](https://github.com/conductor-oss/javascript-sdk/issues) (6) | ✅ complete | `forkTaskJoin()` empty joinOn (live-confirmed), NOOP missing, EXCLUSIVE_JOIN no builder, `readTimeOut` wrong type, SWITCH no JS evaluator, 4 missing enum values |
+| [Go](sdk/go/3.32.0-rc.9/ISSUES.md) | [#262–#265](https://github.com/conductor-oss/go-sdk/issues) (4) | ✅ complete | HTTP wrong JSON field names + int16 overflow, ForkTask empty joinOn (live-confirmed), DynamicForkTask ignores stored join, 6 missing TaskType constants |
+| [C#](sdk/csharp/3.32.0-rc.9/ISSUES.md) | [#158–#161](https://github.com/conductor-oss/csharp-sdk/issues) (4) | ✅ complete | DynamicFork.Join empty joinOn, deprecated field, missing NOOP/EXCLUSIVE_JOIN/START_WORKFLOW builders, missing AGENT enum values |
+| [Ruby](sdk/ruby/3.32.0-rc.9/ISSUES.md) | [#23–#25](https://github.com/conductor-oss/ruby-sdk/issues) (3) | ✅ complete | Deprecated dynamic fork field, SWITCH JS evaluator hardcoded, missing NOOP/EXCLUSIVE_JOIN DSL + AGENT constants |
 
 **Total: 30 issues filed across 6 SDKs.**
 
@@ -98,6 +102,8 @@ The Ruby SDK is the only one that correctly infers `joinOn` from fork branches i
 ## Server-Side Bugs
 
 Found while running the kitchen-sink battery and live SDK tests. See [`BUGS.md`](BUGS.md).
+
+Full details in [`server/3.32.0-rc.9/BUGS.md`](server/3.32.0-rc.9/BUGS.md).
 
 | Bug | Issue | Status |
 |-----|-------|--------|
@@ -111,12 +117,12 @@ Found while running the kitchen-sink battery and live SDK tests. See [`BUGS.md`]
 
 ## Kitchen Sink Battery
 
-`kitchen-sink/` contains a raw JSON battery that exercises all system task types via the REST
-API (no SDK involved). It serves as the server ground truth — if a task type passes here but
-fails in an SDK test, the bug is in the SDK.
+`server/3.32.0-rc.9/kitchen-sink/` contains a raw JSON battery that exercises all system task
+types via the REST API (no SDK involved). It serves as the server ground truth — if a task type
+passes here but fails in an SDK test, the bug is in the SDK.
 
 ```shell
-cd kitchen-sink
+cd server/3.32.0-rc.9/kitchen-sink
 python3 run_battery.py          # run all tests against loki.local:8080
 CONDUCTOR_SERVER=http://... python3 run_battery.py   # point at another server
 ```
@@ -129,10 +135,10 @@ Each `live_test.sh` is self-contained and can be pointed at any server:
 
 ```shell
 # Default: loki.local:8080
-bash go-sdk/live_test.sh
+bash sdk/go/3.32.0-rc.9/live_test.sh
 
 # Point at another server
-CONDUCTOR_SERVER=http://myserver:8080 bash go-sdk/live_test.sh
+CONDUCTOR_SERVER=http://myserver:8080 bash sdk/go/3.32.0-rc.9/live_test.sh
 ```
 
 Tests print `✅ PASS`, `❌ FAIL`, or `🐛 STATIC_BUG` (confirmed by code inspection, not
