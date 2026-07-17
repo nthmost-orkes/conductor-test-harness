@@ -1,24 +1,49 @@
 # conductor-test-harness
 
-A systematic test and analysis harness for Conductor OSS — focused on finding bugs where the
-SDK libraries produce incorrect workflow definitions that either fail silently or misbehave at
-runtime.
+A versioned capabilities catalog and SDK audit harness for Conductor OSS.
 
-Server baseline for all work in this repo: **Conductor OSS 3.32.0-rc.9**
-Live test server: `http://loki.local:8080`
+Two primary purposes:
+
+1. **Capabilities catalog** — machine-readable ground truth of what each server version
+   supports: every task type, every backend, every task combination that works or doesn't.
+   Used as the source-of-truth for SDK PR review, LLM grounding, and onboarding decisions.
+
+2. **SDK audit archive** — systematic static analysis and live test results for all six
+   official Conductor SDKs, surfacing bugs where an SDK produces incorrect workflow
+   definitions that fail silently or misbehave at runtime.
+
+Live test server (3.32.0-rc.9): `http://loki.local:8080`
 
 ---
 
-## What this repo contains
+## Repo structure
 
 ```
 conductor-test-harness/
+├── AGENTS.md                      How AI agents should use this repo for PR review
 ├── README.md
-├── SDK_ANALYSIS_PROCEDURE.md
+├── SDK_ANALYSIS_PROCEDURE.md      Full methodology for SDK audits
+├── scripts/
+│   └── build_changelogs.py        LiteLLM-assisted changelog generation
 ├── server/
+│   ├── 3.30.0/
+│   │   ├── CHANGES.md             SDK-relevant changes at this version (baseline)
+│   │   ├── capabilities.yaml      Machine-readable feature catalog
+│   │   └── FEATURE_MATRIX.md      Human-readable rendering
+│   ├── 3.30.1/
+│   │   └── CHANGES.md             Patch only — no schema changes
+│   ├── 3.30.2/
+│   │   └── CHANGES.md             GraalJS sandbox hardening (breaking for JS that used IO/native)
+│   ├── 3.31.0/
+│   │   ├── CHANGES.md
+│   │   ├── capabilities.yaml
+│   │   └── FEATURE_MATRIX.md
 │   └── 3.32.0-rc.9/
-│       ├── BUGS.md             Server-side bugs found against this version
-│       └── kitchen-sink/       Raw JSON battery — tests all system task types via curl
+│       ├── CHANGES.md
+│       ├── capabilities.yaml
+│       ├── FEATURE_MATRIX.md
+│       ├── BUGS.md                Server-side bugs found at this version
+│       └── kitchen-sink/          Raw JSON battery — tests all task types via curl
 └── sdk/
     ├── python/3.32.0-rc.9/
     ├── java/3.32.0-rc.9/
@@ -35,7 +60,81 @@ Each `sdk/<language>/<server-version>/` directory contains:
 
 ---
 
-## Methodology
+## Capabilities Catalog
+
+The `server/<version>/capabilities.yaml` file is the machine-readable answer to "what does
+this version of Conductor OSS actually support?"
+
+It covers:
+- **System task types** — every `TaskType` enum value: category, status, behavioral notes
+- **Task combination matrix** — which nesting patterns (e.g. DO_WHILE inside FORK_JOIN)
+  are `supported`, `buggy`, or `untested`, with links to known issues
+- **Persistence backends** — execution DAO, index/search DAO, scheduler DAO
+- **Event sinks** — Conductor internal, SQS, Kafka, AMQP, NATS
+- **External payload storage** — S3, Azure Blob, GCS, local filesystem, PostgreSQL
+- **Server capabilities** — scheduler, secrets interpolation, A2A agent protocol, LLM tasks,
+  GraalJS sandbox hardening, MCP integration
+
+`FEATURE_MATRIX.md` is the human-readable rendering of the same data, with ✅/⚠️/🐛/❌/🔲
+status icons, a known bugs table, and a "fixes landed" section.
+
+`CHANGES.md` documents what changed from the prior version, SDK-relevant only: new/removed task
+types, field changes, behavioral changes, breaking changes.
+
+### Versions cataloged
+
+| Server version | Task types | Catalog | Key additions vs prior |
+|---------------|-----------|---------|----------------------|
+| 3.30.0 | 34 | full | Baseline; GraalJS sandbox unhardened |
+| 3.30.1 | 34 | CHANGES.md only | Patch; no SDK-visible changes |
+| 3.30.2 | 34 | CHANGES.md only | GraalJS sandbox hardened (breaking for JS using IO/native APIs) |
+| 3.31.0 | 34 | full | SWITCH empty-case fix; DO_WHILE truncation fix; nested JOIN reset fix |
+| 3.32.0-rc.9 | 37 | full | AGENT + GET_AGENT_CARD + CANCEL_AGENT; MCP tasks; secrets/env interpolation |
+
+### Using the catalog for PR review
+
+When reviewing a PR against any Conductor SDK:
+
+1. Load `server/<version>/capabilities.yaml` and `sdk/<lang>/<version>/STATIC_ANALYSIS.md`
+2. For any changed model or field, verify the exact server field name against the Java source
+   (never infer from SDK naming alone — the server is the spec)
+3. Check `task_combinations` in `capabilities.yaml` for any nesting patterns the PR enables
+4. Check `known_bugs` for any open server issues that affect the changed feature
+5. See [`AGENTS.md`](AGENTS.md) for the full AI agent workflow and common review patterns
+
+### LLM grounding
+
+The catalog is small enough to inject directly as a system prompt context (~2–4 KB per version).
+When combined with the issue tables, it lets an LLM reviewer:
+
+- Detect field name mismatches without hallucinating server behavior
+- Flag task type coverage gaps against the known-good list
+- Identify combinations the PR enables that have known server-side bugs
+- Confirm whether a "works against OSS" claim matches what OSS actually supports
+
+---
+
+## SDK Audit Results
+
+All issues mention "Conductor OSS 3.32.0-rc.9" as the tested baseline.
+
+| SDK | Issues filed | Status | Key findings |
+|-----|-------------|--------|-------------|
+| [Python](sdk/python/3.32.0-rc.9/ISSUES.md) | [#426–#432](https://github.com/conductor-oss/python-sdk/issues) (7) | ✅ complete | `wait_until` wrong key, deprecated dynamic fork field, missing NOOP/EXCLUSIVE_JOIN/AGENT |
+| [Java](sdk/java/3.32.0-rc.9/ISSUES.md) | [#130–#135](https://github.com/conductor-oss/conductor-java-sdk/issues) (6) | ✅ complete | NOOP/START_WORKFLOW/HUMAN/EXCLUSIVE_JOIN no builder, Http no fluent timeout, TaskType missing AGENT family; 1 false positive retracted |
+| [JavaScript](sdk/javascript/3.32.0-rc.9/ISSUES.md) | [#135–#140](https://github.com/conductor-oss/javascript-sdk/issues) (6) | ✅ complete | `forkTaskJoin()` empty joinOn (live-confirmed), NOOP missing, EXCLUSIVE_JOIN no builder, `readTimeOut` wrong type, SWITCH no JS evaluator, 4 missing enum values |
+| [Go](sdk/go/3.32.0-rc.9/ISSUES.md) | [#262–#265](https://github.com/conductor-oss/go-sdk/issues) (4) | ✅ complete | HTTP wrong JSON field names + int16 overflow, ForkTask empty joinOn (live-confirmed), DynamicForkTask ignores stored join, 6 missing TaskType constants |
+| [C#](sdk/csharp/3.32.0-rc.9/ISSUES.md) | [#158–#161](https://github.com/conductor-oss/csharp-sdk/issues) (4) | ✅ complete | DynamicFork.Join empty joinOn, deprecated field, missing NOOP/EXCLUSIVE_JOIN/START_WORKFLOW builders, missing AGENT enum values |
+| [Ruby](sdk/ruby/3.32.0-rc.9/ISSUES.md) | [#23–#25](https://github.com/conductor-oss/ruby-sdk/issues) (3) | ✅ complete | Deprecated dynamic fork field, SWITCH JS evaluator hardcoded, missing NOOP/EXCLUSIVE_JOIN DSL + AGENT constants |
+
+**Total: 30 issues filed across 6 SDKs.**
+
+The Ruby SDK is the only one that correctly infers `joinOn` from fork branches in its
+`parallel` block — the bug that affected every other SDK.
+
+---
+
+## SDK Audit Methodology
 
 The full procedure is in [`SDK_ANALYSIS_PROCEDURE.md`](SDK_ANALYSIS_PROCEDURE.md). Summary:
 
@@ -79,31 +178,9 @@ against confirmed findings from JS/Go audits that hit the same server code paths
 
 ---
 
-## SDK Audit Results
-
-All issues mention "Conductor OSS 3.32.0-rc.9" as the tested baseline.
-
-| SDK | Issues filed | Status | Key findings |
-|-----|-------------|--------|-------------|
-| [Python](sdk/python/3.32.0-rc.9/ISSUES.md) | [#426–#432](https://github.com/conductor-oss/python-sdk/issues) (7) | ✅ complete | `wait_until` wrong key, deprecated dynamic fork field, missing NOOP/EXCLUSIVE_JOIN/AGENT |
-| [Java](sdk/java/3.32.0-rc.9/ISSUES.md) | [#130–#135](https://github.com/conductor-oss/conductor-java-sdk/issues) (6) | ✅ complete | NOOP/START_WORKFLOW/HUMAN/EXCLUSIVE_JOIN no builder, Http no fluent timeout, TaskType missing AGENT family; 1 false positive retracted |
-| [JavaScript](sdk/javascript/3.32.0-rc.9/ISSUES.md) | [#135–#140](https://github.com/conductor-oss/javascript-sdk/issues) (6) | ✅ complete | `forkTaskJoin()` empty joinOn (live-confirmed), NOOP missing, EXCLUSIVE_JOIN no builder, `readTimeOut` wrong type, SWITCH no JS evaluator, 4 missing enum values |
-| [Go](sdk/go/3.32.0-rc.9/ISSUES.md) | [#262–#265](https://github.com/conductor-oss/go-sdk/issues) (4) | ✅ complete | HTTP wrong JSON field names + int16 overflow, ForkTask empty joinOn (live-confirmed), DynamicForkTask ignores stored join, 6 missing TaskType constants |
-| [C#](sdk/csharp/3.32.0-rc.9/ISSUES.md) | [#158–#161](https://github.com/conductor-oss/csharp-sdk/issues) (4) | ✅ complete | DynamicFork.Join empty joinOn, deprecated field, missing NOOP/EXCLUSIVE_JOIN/START_WORKFLOW builders, missing AGENT enum values |
-| [Ruby](sdk/ruby/3.32.0-rc.9/ISSUES.md) | [#23–#25](https://github.com/conductor-oss/ruby-sdk/issues) (3) | ✅ complete | Deprecated dynamic fork field, SWITCH JS evaluator hardcoded, missing NOOP/EXCLUSIVE_JOIN DSL + AGENT constants |
-
-**Total: 30 issues filed across 6 SDKs.**
-
-The Ruby SDK is the only one that correctly infers `joinOn` from fork branches in its
-`parallel` block — the bug that affected every other SDK.
-
----
-
 ## Server-Side Bugs
 
-Found while running the kitchen-sink battery and live SDK tests. See [`BUGS.md`](BUGS.md).
-
-Full details in [`server/3.32.0-rc.9/BUGS.md`](server/3.32.0-rc.9/BUGS.md).
+Found while running the kitchen-sink battery and live SDK tests.
 
 | Bug | Issue | Status |
 |-----|-------|--------|
@@ -113,18 +190,20 @@ Full details in [`server/3.32.0-rc.9/BUGS.md`](server/3.32.0-rc.9/BUGS.md).
 | WAIT task misleading error for ISO-8601 duration format | [#1310](https://github.com/conductor-oss/conductor/issues/1310) | Open |
 | SWITCH javascript evaluator validates expression with no bindings | [#1311](https://github.com/conductor-oss/conductor/issues/1311) | Open |
 
+Full details in [`server/3.32.0-rc.9/BUGS.md`](server/3.32.0-rc.9/BUGS.md).
+
 ---
 
 ## Kitchen Sink Battery
 
-`server/3.32.0-rc.9/kitchen-sink/` contains a raw JSON battery that exercises all system task
+`server/<version>/kitchen-sink/` contains a raw JSON battery that exercises all system task
 types via the REST API (no SDK involved). It serves as the server ground truth — if a task type
 passes here but fails in an SDK test, the bug is in the SDK.
 
 ```shell
 cd server/3.32.0-rc.9/kitchen-sink
-python3 run_battery.py          # run all tests against loki.local:8080
-CONDUCTOR_SERVER=http://... python3 run_battery.py   # point at another server
+python3 run_battery.py                              # run against loki.local:8080
+CONDUCTOR_SERVER=http://... python3 run_battery.py  # point at another server
 ```
 
 ---
@@ -141,5 +220,19 @@ bash sdk/go/3.32.0-rc.9/live_test.sh
 CONDUCTOR_SERVER=http://myserver:8080 bash sdk/go/3.32.0-rc.9/live_test.sh
 ```
 
-Tests print `✅ PASS`, `❌ FAIL`, or `🐛 STATIC_BUG` (confirmed by code inspection, not
-runtime) for each finding.
+Tests print `PASS`, `FAIL`, or `STATIC_BUG` (confirmed by code inspection, not runtime) for
+each finding.
+
+---
+
+## Adding a new server version
+
+See [`AGENTS.md`](AGENTS.md#how-to-add-a-new-server-version) for the full step-by-step.
+Short version:
+
+1. `mkdir -p server/<version>/kitchen-sink`
+2. Diff `TaskType.java` against the prior version tag
+3. Adapt the prior `capabilities.yaml` with verified diffs; write `CHANGES.md`
+4. Adapt `FEATURE_MATRIX.md`; update the known bugs table
+5. Run the kitchen-sink battery against the new server
+6. Update the versions table in this file
