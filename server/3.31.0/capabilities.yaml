@@ -1,0 +1,655 @@
+version: "3.31.0"
+
+system_tasks:
+  # Structural / control-flow tasks
+  SIMPLE:
+    status: supported
+    category: worker
+    notes: Poll-driven worker task; the fundamental unit of user-defined work.
+  DYNAMIC:
+    status: supported
+    category: worker
+    notes: Resolves taskReferenceName at runtime from workflow input; wraps any registered task type.
+  FORK_JOIN:
+    status: supported
+    category: structural
+    notes: Static fork; all branches defined at workflow-definition time. Must be immediately followed by a JOIN task.
+  FORK_JOIN_DYNAMIC:
+    status: supported
+    category: structural
+    notes: Dynamic fork; branches generated at runtime from a list/map expression.
+  DECISION:
+    status: deprecated
+    category: structural
+    notes: Alias for SWITCH retained for backwards compatibility. Marked @Deprecated in source. Use SWITCH instead.
+  SWITCH:
+    status: supported
+    category: structural
+    notes: Condition-based branching. Supports javascript and value-param evaluators.
+  JOIN:
+    status: supported
+    category: structural
+    notes: Waits for all (or a configurable subset of) forked branches to complete.
+  DO_WHILE:
+    status: supported
+    category: structural
+    notes: Iterative loop. loopCondition evaluated by javascript or value-param evaluator after each iteration.
+  SUB_WORKFLOW:
+    status: supported
+    category: structural
+    notes: Executes a complete named workflow as a single task. Supports inline subWorkflowDefinition.
+  START_WORKFLOW:
+    status: supported
+    category: structural
+    notes: Fire-and-forget workflow launch; does not wait for the started workflow to complete.
+  EVENT:
+    status: supported
+    category: messaging
+    notes: Publishes a message to an event sink (conductor, sqs, kafka, amqp, nats, nats-streaming).
+  WAIT:
+    status: supported
+    category: control
+    notes: >
+      Pauses execution until an external signal or a duration/timestamp elapses.
+      Supports absolute ISO-8601 timestamps and durations (e.g. PT10S).
+      Known issue #1310: misleading error message for some duration formats; functional behavior is correct.
+  HUMAN:
+    status: supported
+    category: control
+    notes: >
+      Sets task to IN_PROGRESS and waits for an external actor to complete it via the task API.
+      OSS implementation is a minimal stub (no built-in form templates or assignment UI);
+      full assignment/form workflow requires Orkes Enterprise. The task itself is functional.
+  USER_DEFINED:
+    status: supported
+    category: worker
+    notes: Fallback type for any unrecognized task type string; treated as a poll-driven worker task.
+  HTTP:
+    status: supported
+    category: system
+    notes: Executes an outbound HTTP/HTTPS request. Supports GET, POST, PUT, DELETE, HEAD, PATCH.
+  LAMBDA:
+    status: supported
+    category: system
+    notes: Synchronous JavaScript expression evaluation using GraalVM polyglot engine. Deprecated in favor of INLINE.
+  INLINE:
+    status: supported
+    category: system
+    notes: >
+      Synchronous JavaScript or Python expression evaluation via GraalVM polyglot engine.
+      Preferred replacement for LAMBDA. Hardened sandbox (no IO, no host class loading,
+      no thread/process creation, no env access, no reflection). 4-second execution timeout by default.
+  EXCLUSIVE_JOIN:
+    status: supported
+    category: structural
+    notes: >
+      Join that completes as soon as ONE branch completes (rather than all branches).
+      Designed for use after a SWITCH task's branches. Must NOT be used directly after FORK_JOIN
+      (use JOIN there); see known issue #1309.
+  TERMINATE:
+    status: supported
+    category: control
+    notes: Immediately terminates the workflow with a configurable status (COMPLETED, FAILED, TERMINATED).
+  KAFKA_PUBLISH:
+    status: supported
+    category: messaging
+    notes: Publishes a message to an Apache Kafka topic.
+  JSON_JQ_TRANSFORM:
+    status: supported
+    category: processing
+    notes: Applies a jq expression to transform JSON payload. Uses the jq-core library.
+  SET_VARIABLE:
+    status: supported
+    category: processing
+    notes: Sets one or more workflow-scoped variables accessible as ${workflow.variables.X} in subsequent tasks.
+  NOOP:
+    status: supported
+    category: control
+    notes: No-operation; transitions immediately to COMPLETED. Useful as a placeholder or sentinel.
+  LLM_TEXT_COMPLETE:
+    status: supported
+    category: ai
+    notes: Text completion via a configured LLM provider. Part of the ai module.
+  LLM_CHAT_COMPLETE:
+    status: supported
+    category: ai
+    notes: Chat completion (multi-turn) via a configured LLM provider. Supports tool calling.
+  LLM_INDEX_TEXT:
+    status: supported
+    category: ai
+    notes: Indexes text into a vector database for later semantic search.
+  LLM_SEARCH_INDEX:
+    status: supported
+    category: ai
+    notes: Semantic similarity search against a configured vector database.
+  LLM_GENERATE_EMBEDDINGS:
+    status: supported
+    category: ai
+    notes: Generates vector embeddings from text using a configured embedding model.
+  LLM_STORE_EMBEDDINGS:
+    status: supported
+    category: ai
+    notes: Stores pre-generated embeddings into a vector database.
+  LLM_GET_EMBEDDINGS:
+    status: supported
+    category: ai
+    notes: Retrieves stored embeddings from a vector database by key.
+  LIST_MCP_TOOLS:
+    status: supported
+    category: ai
+    notes: Lists tools available from a configured MCP (Model Context Protocol) server.
+  CALL_MCP_TOOL:
+    status: supported
+    category: ai
+    notes: Invokes a specific tool on a configured MCP server and returns the result.
+  PULL_WORKFLOW_MESSAGES:
+    status: supported
+    category: messaging
+    notes: Pulls messages from a workflow message queue; used for inter-workflow communication.
+
+task_combinations:
+  DO_WHILE:
+    DO_WHILE:
+      status: buggy
+      notes: >
+        Two confirmed bugs. BUG-1 (loopCondition TypeError when inner loop completes) is fixed in
+        current source (DoWhile.java lines 521-523). BUG-2 (body task reference name collision:
+        e.g. dwdw_body__1 created twice when outer loop iterates N>1 times) is open and unresolved.
+        Inner loop runs only 1 iteration safely when outer loop iterates more than once.
+      known_issues:
+        - "conductor-oss/conductor#1307"
+        - "conductor-oss/conductor#1308"
+      workaround: >
+        Limit outer DO_WHILE to 1 iteration maximum when nesting DO_WHILE. For multi-iteration
+        outer loops requiring inner iteration, use FORK_JOIN or SUB_WORKFLOW instead.
+      tested_by: "kitchen-sink battery: ks_combo_do_while_do_while (outer=2, inner=2 iterations)"
+    FORK_JOIN:
+      status: supported
+      notes: >
+        Static FORK_JOIN inside DO_WHILE loopOver is supported and tested. DoWhile.java correctly
+        appends iteration suffixes to nested task references via TaskUtils.appendIteration().
+      known_issues:
+        - "conductor-oss/conductor#1119 (rerun from DO_WHILE inside fork may terminate workflow)"
+        - "conductor-oss/conductor#1120 (rerun from DO_WHILE iteration task inside fork may terminate workflow)"
+      tested_by: "do_while_integration_test.json; java-sdk/examples/task-patterns/fork-in-do-while/"
+    FORK_JOIN_DYNAMIC:
+      status: supported
+      notes: >
+        FORK_JOIN_DYNAMIC inside DO_WHILE loop is confirmed working. Kitchen-sink workflow
+        ks_combo_dynamic_fork_in_do_while (2 iterations, LAMBDA-generated dynamic tasks) completes
+        successfully with no known bugs or limitations.
+      known_issues: []
+      tested_by: "kitchen-sink battery: ks_combo_dynamic_fork_in_do_while"
+    SUB_WORKFLOW:
+      status: supported
+      notes: >
+        SUB_WORKFLOW inside DO_WHILE is explicitly tested. DoWhile executor handles all task
+        types uniformly in loopOver. Rerun/retry scenarios covered by e2e tests after
+        commits b165ce03c and 18fd0396b.
+      known_issues: []
+      tested_by: "WorkflowRerunTests.testRerunFromSubWorkflowTaskInDoWhile (e2e); do_while_sub_workflow_integration_test.json"
+    SWITCH:
+      status: supported
+      notes: >
+        SWITCH inside DO_WHILE is extensively tested. A previous timing bug (#895) where iterations
+        advanced prematurely when a task inside a SWITCH case completed before its successor was
+        scheduled was fixed in commit 69faed274 and is covered by regression tests.
+      known_issues:
+        - "conductor-oss/conductor#895 (fixed in 3.31.0 via commit 69faed274)"
+      tested_by: "DoWhileEdgeCasesTests.testDoWhileWaitSwitchIteration(); DoWhileEdgeCasesTests.testDoWhileKeepLastNSwitch()"
+    WAIT:
+      status: supported
+      notes: >
+        WAIT inside DO_WHILE loopOver works correctly. WAIT's async nature (isAsync()=true)
+        is compatible with DO_WHILE's iteration logic, completion detection, and loop condition
+        evaluation.
+      known_issues: []
+      tested_by: "DoWhileEdgeCasesTests.testDoWhileWaitSwitchIteration() (10-iteration loop with WAIT + SWITCH)"
+    HTTP:
+      status: supported
+      notes: HTTP inside DO_WHILE loop is confirmed working across multiple iterations.
+      known_issues: []
+      tested_by: "kitchen-sink battery: ks_combo_do_while_all_leaf"
+    INLINE:
+      status: supported
+      notes: >
+        INLINE inside DO_WHILE is fully supported and regression-tested. A previous bug where
+        premature iteration advancement occurred when INLINE appeared before SWITCH in a DO_WHILE
+        was fixed in commit 69faed274.
+      known_issues: []
+      tested_by: "DoWhileEdgeCasesTests.testStackoverflower() (E2E); DoWhileTest unit regression tests"
+    TERMINATE:
+      status: supported
+      notes: >
+        TERMINATE inside DO_WHILE acts as a workflow-level escape: it immediately terminates
+        the workflow (with configured status) rather than just exiting the loop. This is by design.
+        A test workflow definition (terminate_task_terminated_status_in_do_while_test.json) exists.
+      known_issues: []
+      tested_by: "terminate_task_terminated_status_in_do_while_test.json (added in PR #764)"
+    HUMAN:
+      status: untested
+      notes: >
+        No explicit validation restrictions or executor code prevents this combination. Source
+        structure (generic loopOver handling in DoWhile.execute()) suggests it should work: HUMAN
+        transitions to IN_PROGRESS and waits for external completion, which is compatible with
+        DO_WHILE's loop condition checking. No e2e tests confirm this across multiple iterations.
+      known_issues: []
+      tested_by: none
+
+  FORK_JOIN:
+    DO_WHILE:
+      status: supported
+      notes: >
+        DO_WHILE inside FORK_JOIN parallel branches is supported. Static FORK_JOIN with DO_WHILE
+        branches is tested via do_while_multiple_integration_test.json and
+        do_while_timeline_ui_demo.json.
+      known_issues: []
+      tested_by: "do_while_multiple_integration_test.json; do_while_timeline_ui_demo.json"
+    FORK_JOIN:
+      status: supported
+      notes: >
+        Nested static FORK_JOIN (inner fork inside outer fork branch) is explicitly supported and
+        tested end-to-end. ForkJoinTaskMapper permits arbitrary task structures within fork branches.
+      known_issues: []
+      tested_by: "ForkJoinSyncModeIntegrationTest.testSync_nestedForkJoin() (e2e); kitchen-sink battery: ks_combo_fork_join_fork_join"
+    SUB_WORKFLOW:
+      status: supported
+      notes: >
+        SUB_WORKFLOW inside FORK_JOIN branches is explicitly supported and documented.
+        WorkflowExecutorOps.java includes explicit logic for SUB_WORKFLOW completion within
+        FORK_JOIN contexts.
+      known_issues: []
+      tested_by: "kitchen-sink: ks_combo_fork_join_sub_workflow; fork_join_sub_workflow.json; nested_fork_join_with_sub_workflow_integration_test.json"
+    SWITCH:
+      status: supported
+      notes: >
+        SWITCH inside FORK_JOIN branches is fully supported. ForkJoinTaskMapper delegates to
+        DeciderService.getTasksToBeScheduled() for each fork task, which invokes SwitchTaskMapper
+        correctly. JOIN task includes explicit SWITCH-aware completion logic (commit 02aa4a5ca).
+      known_issues:
+        - "WorkflowRerunTests.testRerunForkJoinWithWaitAndSwitchTasks (disabled e2e test for rerun case only)"
+      tested_by: "java-sdk/examples/task-patterns/switch-plus-fork; switch_and_fork_join_integration_test.json; SwitchAndJoinIntegrationTest"
+    EXCLUSIVE_JOIN:
+      status: buggy
+      notes: >
+        FORK_JOIN must be immediately followed by a JOIN task. ForkJoinTaskMapper.java line 103
+        enforces this: if the following task is not JOIN, it throws TerminateWorkflowException
+        with "Fork task definition is not followed by a join task". EXCLUSIVE_JOIN after FORK_JOIN
+        fails at runtime with this error even though workflow registration succeeds.
+      known_issues:
+        - "conductor-oss/conductor#1309"
+      workaround: >
+        Use JOIN immediately after FORK_JOIN. If exclusive-join semantics are needed, restructure:
+        place EXCLUSIVE_JOIN inside individual fork branches before the JOIN, or redesign using
+        SWITCH + parallel branches without FORK_JOIN.
+      tested_by: "kitchen-sink battery: ks_combo_fork_join_exclusive_join (fails at runtime)"
+
+  SWITCH:
+    DO_WHILE:
+      status: supported
+      notes: >
+        DO_WHILE inside SWITCH case branches is supported and well-tested (same fix applies as
+        SWITCH inside DO_WHILE — commit 69faed274 addressed the timing interaction).
+      known_issues: []
+      tested_by: "DoWhileEdgeCasesTests (multiple tests); DoWhileTest unit tests"
+    FORK_JOIN:
+      status: partial
+      notes: >
+        A test definition (switch_and_fork_join_integration_test.json) exists for FORK_JOIN inside
+        SWITCH branches, and mappers support the combination. SwitchTaskMapper recursively calls
+        DeciderService.getTasksToBeScheduled() for case tasks. However, end-to-end test execution
+        confirming correct runtime behavior is unverified in current test results.
+      known_issues: []
+      tested_by: "switch_and_fork_join_integration_test.json (definition exists; e2e execution unconfirmed)"
+    EXCLUSIVE_JOIN:
+      status: supported
+      notes: >
+        EXCLUSIVE_JOIN is explicitly designed for SWITCH branch cases (after a fork, inside a SWITCH
+        case). The pattern is the canonical use case for EXCLUSIVE_JOIN per SDK documentation.
+        SwitchTaskMapper recursively schedules EXCLUSIVE_JOIN via ExclusiveJoinTaskMapper.
+      known_issues: []
+      tested_by: "Live server verification via kitchen-sink battery; SDK_ANALYSIS_PROCEDURE.md documentation"
+    TERMINATE:
+      status: supported
+      notes: >
+        TERMINATE inside a SWITCH case branch is a common and supported pattern for conditional
+        workflow termination. Demonstrated in the payment_transfer example workflow.
+      known_issues: []
+      tested_by: "payment_transfer workflow (src/main/resources/workflow-v1.json)"
+
+  SUB_WORKFLOW:
+    DO_WHILE:
+      status: supported
+      notes: >
+        DO_WHILE inside a SUB_WORKFLOW definition is fully supported and tested. The sub-workflow
+        executes via normal workflow execution flow, inheriting all task type support.
+      known_issues: []
+      tested_by: "SubWorkflowInlineTests.testSubWorkflowDefinitionFromStringExpression(); WorkflowRerunTests.testRerunSubWorkflowTaskInsideForkInsideDoWhilePreservesCancelledSibling()"
+    FORK_JOIN:
+      status: supported
+      notes: >
+        FORK_JOIN inside a SUB_WORKFLOW definition is fully supported. SubWorkflow executor
+        launches the referenced workflow through normal execution flow.
+      known_issues: []
+      tested_by: "SubWorkflowTests.java (e2e); fork_join_sub_workflow.json; nested_fork_join_swf.json"
+
+  FORK_JOIN_DYNAMIC:
+    DO_WHILE:
+      status: supported
+      notes: >
+        DO_WHILE containing FORK_JOIN_DYNAMIC is confirmed working in kitchen-sink battery tests
+        (2 of 3 recent runs COMPLETED). ForkJoinDynamicTaskMapper includes code to detect and
+        handle nested dynamic forks.
+      known_issues: []
+      tested_by: "kitchen-sink battery: ks_combo_dynamic_fork_in_do_while"
+
+persistence_backends:
+  execution_dao:
+    sqlite:
+      status: supported
+      notes: Default backend for development/single-node deployments. Bundled; zero external dependencies.
+    mysql:
+      status: supported
+      notes: Production-grade relational backend. Requires conductor.db.type=mysql.
+    postgresql:
+      status: supported
+      notes: Production-grade relational backend. Requires conductor.db.type=postgres.
+    cassandra:
+      status: supported
+      notes: Distributed NoSQL backend for large-scale deployments. Requires conductor.db.type=cassandra.
+    redis:
+      status: supported
+      notes: In-memory backend with optional persistence. Requires conductor.db.type=redis.
+    in_memory:
+      status: supported
+      notes: Transient in-memory store for testing only. No persistence across restarts.
+
+  index_dao:
+    elasticsearch_7:
+      status: supported
+      notes: es7-persistence module. Requires conductor.indexing.type=elasticsearch and ES 7.x endpoint.
+    elasticsearch_8:
+      status: supported
+      notes: es8-persistence module. Current recommended search backend.
+    opensearch_2:
+      status: supported
+      notes: os-persistence-v2 module with dependency shading for OS 2.x compatibility.
+    opensearch_3:
+      status: supported
+      notes: os-persistence-v3 module with dependency shading for OS 3.x compatibility.
+    opensearch_generic:
+      status: deprecated
+      notes: os-persistence shim only; superseded by os-persistence-v2/v3.
+    elasticsearch_6:
+      status: deprecated
+      notes: es6-persistence module; ES 6.x is EOL. Use ES 7 or 8.
+    sqlite_index:
+      status: supported
+      notes: SQLite-backed indexing for development use. conductor.indexing.type=sqlite.
+    none:
+      status: supported
+      notes: Indexing disabled (conductor.indexing.type=none). Workflow search unavailable.
+
+  queue_dao:
+    notes: Queue backend is typically coupled to the execution DAO backend.
+    sqlite: supported
+    redis: supported
+    mysql: supported
+    postgresql: supported
+
+  scheduler_dao:
+    mysql:
+      status: supported
+      notes: >
+        scheduler/mysql-persistence module (mapped as scheduler-mysql-persistence in settings.gradle).
+        Flyway migrations: V1__scheduler_tables.sql, V2__scheduler_next_run_table.sql.
+        Production-ready.
+    postgresql:
+      status: supported
+      notes: >
+        scheduler/postgres-persistence module (mapped as scheduler-postgres-persistence).
+        Flyway migrations: V1__scheduler_tables.sql, V2__scheduler_next_run_table.sql.
+        Production-ready.
+    sqlite:
+      status: supported
+      notes: >
+        scheduler/sqlite-persistence module (mapped as scheduler-sqlite-persistence).
+        Flyway migrations: V1__scheduler_tables.sql, V2__scheduler_next_run_table.sql.
+        Schema mirrors Orkes Conductor without multi-tenancy. Production-ready.
+
+event_sinks:
+  conductor_internal:
+    status: supported
+    queue_prefix: "conductor:"
+    notes: >
+      Default event queue backed by the configured QueueDAO (sqlite, redis, mysql, postgres).
+      Enabled by default via ConductorEventQueueProvider; disable with
+      conductor.event-queues.default.enabled=false.
+  sqs:
+    status: supported
+    module: awssqs-event-queue
+    notes: AWS SQS event sink via SQSEventQueueProvider.
+  kafka:
+    status: supported
+    module: kafka-event-queue
+    notes: Apache Kafka event sink via KafkaEventQueueProvider.
+  amqp:
+    status: supported
+    module: amqp
+    notes: AMQP 0-9-1 event sink (RabbitMQ compatible) via AMQPEventQueueProvider.
+  nats:
+    status: supported
+    module: nats
+    notes: NATS JetStream event sink via JetStreamEventQueueProvider. Also includes legacy NATSEventQueueProvider.
+  nats_streaming:
+    status: supported
+    module: nats-streaming
+    notes: NATS Streaming (STAN) event sink via NATSStreamEventQueueProvider. Note: NATS Streaming is itself EOL upstream.
+
+external_storage:
+  aws_s3:
+    status: supported
+    module: awss3-storage
+    notes: AWS S3 external payload storage for large workflow inputs/outputs.
+  azure_blob:
+    status: supported
+    module: azureblob-storage
+    notes: Azure Blob Storage external payload storage.
+  gcs:
+    status: supported
+    module: gcs-storage
+    notes: Google Cloud Storage external payload storage.
+  local_file:
+    status: supported
+    module: local-file-storage
+    notes: Local filesystem storage. Useful for development and single-node deployments.
+  postgres_external:
+    status: supported
+    module: postgres-external-storage
+    notes: PostgreSQL external payload storage (separate from main PostgreSQL execution DAO).
+
+server_capabilities:
+  scheduler:
+    status: supported
+    since: pre-3.31.0
+    notes: >
+      Workflow scheduler with cron-expression support. Enabled by default
+      (conductor.scheduler.enabled=true). Scheduler DAO backends (mysql, postgres, sqlite)
+      exist as modules but their migration resources appear incomplete in this release.
+
+  human_task_assignments:
+    status: partial
+    since: pre-3.31.0
+    notes: >
+      HUMAN task type is functional (transitions to IN_PROGRESS, waits for external completion
+      via task API). Full assignment management, form templates, and assignment UI are Orkes
+      Enterprise features. OSS provides the task stub and REST update endpoint only.
+
+  wait_for_webhook:
+    status: not_supported
+    notes: >
+      The webhooks-oss and webhooks modules exist in the source tree but appear to be stubs
+      (only build/ directories found, no implementation resources). WAIT_FOR_WEBHOOK is not
+      a TaskType in this version's enum. Use the WAIT task with external task completion instead.
+
+  http_poll_task:
+    status: not_supported
+    notes: HTTP_POLL is not present in TaskType.java for this version. Not available in OSS.
+
+  secrets_interpolation:
+    status: not_supported
+    notes: >
+      Not available in 3.31.0. SecretsDAO / RuntimeMetadataResolver with ${workflow.secrets.X}
+      interpolation was added in 3.32.0-rc.9. Use explicit task inputs or environment variables
+      passed through workflow input instead.
+
+  env_interpolation:
+    status: not_supported
+    notes: >
+      Not available in 3.31.0. EnvironmentDAO-backed ${workflow.env.X} interpolation was added
+      in 3.32.0-rc.9. Use explicit workflow input parameters to pass environment values.
+
+  a2a_agent_protocol:
+    status: not_supported
+    notes: >
+      Not available in 3.31.0. AGENT, GET_AGENT_CARD, and CANCEL_AGENT task types and the
+      A2AWorkflowAgent server endpoint were added in 3.32.0-rc.9 (PR #1288).
+
+  ai_llm:
+    status: supported
+    since: pre-3.31.0
+    notes: >
+      LLM tasks (LLM_TEXT_COMPLETE, LLM_CHAT_COMPLETE, LLM_INDEX_TEXT, LLM_SEARCH_INDEX,
+      LLM_GENERATE_EMBEDDINGS, LLM_STORE_EMBEDDINGS, LLM_GET_EMBEDDINGS) backed by the ai module.
+      Enabled conditionally via AIIntegrationEnabledCondition.
+    providers:
+      - name: openai
+        provider_id: openai
+      - name: anthropic
+        provider_id: anthropic
+        notes: supportsAssistantPrefill=false (Anthropic rejects trailing assistant messages)
+      - name: azure_openai
+        provider_id: azure_openai
+      - name: google_vertex_ai
+        provider_id: vertex_ai
+      - name: aws_bedrock
+        provider_id: bedrock
+      - name: cohere
+        provider_id: cohere
+      - name: mistral
+        provider_id: mistral
+      - name: ollama
+        provider_id: ollama
+      - name: hugging_face
+        provider_id: huggingface
+      - name: perplexity
+        provider_id: perplexity
+      - name: grok
+        provider_id: Grok
+      - name: stability_ai
+        provider_id: stabilityai
+      - name: litellm
+        provider_id: litellm
+
+  graalvm_javascript_sandbox:
+    status: supported
+    since: "3.30.2"
+    notes: >
+      GraalVM Polyglot engine used for INLINE, LAMBDA, SWITCH (javascript evaluator), and
+      DO_WHILE loopCondition evaluation. Sandbox enforces: no IO access, no host class loading,
+      no native access, no thread creation, no process creation, no environment variable access,
+      no reflection (Class, ClassLoader, Method, Field, Constructor, Array, Runtime, ProcessBuilder,
+      Process, System, Thread, ThreadGroup all denied). 4-second execution timeout by default
+      (CONDUCTOR_SCRIPT_MAX_EXECUTION_SECONDS env var). Source caching with LRU-like eviction
+      (CONDUCTOR_SCRIPT_SOURCE_CACHE_SIZE, default 1024). Context pooling optional
+      (CONDUCTOR_SCRIPT_CONTEXT_POOL_ENABLED, default false; enables pool of reusable Contexts).
+      Sandbox hardening fully inherited from 3.30.2 patch.
+
+  event_handlers:
+    status: supported
+    since: pre-3.31.0
+    notes: >
+      Event handlers process messages from event queues and execute configured actions
+      (start workflow, complete task, fail task, etc.) via DefaultEventProcessor and
+      ActionProcessor.
+
+  workflow_variables:
+    status: supported
+    since: pre-3.31.0
+    notes: >
+      SET_VARIABLE task writes to workflow-scoped variables. Variables accessible in task
+      input expressions as ${workflow.variables.X}. Variables persist across the workflow
+      lifetime and can be read/written multiple times.
+
+  workflow_input_expressions:
+    status: supported
+    since: pre-3.31.0
+    notes: >
+      Standard JSONPath-style expression interpolation in task inputParameters:
+      ${workflow.input.X}, ${workflow.output.X}, ${task.output.X},
+      ${workflow.variables.X}, ${workflow.correlationId}, ${workflow.workflowId}, etc.
+      Evaluated by the expression evaluator at task scheduling time.
+
+  mcp_integration:
+    status: supported
+    since: pre-3.31.0
+    notes: >
+      Model Context Protocol (MCP) integration via LIST_MCP_TOOLS and CALL_MCP_TOOL task types.
+      MCPService provides the runtime; tasks allow workflows to discover and invoke tools
+      exposed by any MCP-compatible server.
+
+  pull_workflow_messages:
+    status: supported
+    since: pre-3.31.0
+    notes: >
+      PULL_WORKFLOW_MESSAGES task enables pub/sub messaging between workflows via
+      WorkflowMessageQueueResource REST endpoint. Backed by configured QueueDAO.
+
+  worker_poll_visibility:
+    status: not_supported
+    notes: >
+      Not available in 3.31.0. Worker poll visibility in UI/API was added in 3.32.0-rc.9
+      (PR #1287).
+
+  metadata_overwrite_enforcement:
+    status: not_supported
+    notes: >
+      POST /metadata/workflow does not enforce the overwrite flag in 3.31.0; all updates
+      overwrite silently regardless of the overwrite parameter value. Strict enforcement
+      was added in a later version.
+
+known_bugs:
+  - id: "conductor-oss/conductor#1307"
+    summary: "Nested DO_WHILE: loopCondition TypeError when inner loop completes during outer loop iteration N>1"
+    status: open
+    workaround: "Limit outer DO_WHILE to 1 iteration maximum"
+  - id: "conductor-oss/conductor#1308"
+    summary: "Nested DO_WHILE: body task reference name collision (e.g. dwdw_body__1 created twice) when outer loop iterates N>1"
+    status: open
+    workaround: "Limit outer DO_WHILE to 1 iteration maximum"
+  - id: "conductor-oss/conductor#1309"
+    summary: "FORK_JOIN + EXCLUSIVE_JOIN: workflow fails at runtime with 'Fork task definition is not followed by a join task'"
+    status: open
+    workaround: "Use JOIN after FORK_JOIN; place EXCLUSIVE_JOIN inside branches or after JOIN"
+  - id: "conductor-oss/conductor#1310"
+    summary: "WAIT task: misleading error message for some ISO-8601 duration format inputs; task function is correct"
+    status: open
+    workaround: "Use fully-specified ISO-8601 durations (e.g. PT10S); absolute timestamps work without issue"
+  - id: "conductor-oss/conductor#1311"
+    summary: "SWITCH javascript evaluator: validates expression with no bindings causing confusing errors"
+    status: open
+    workaround: "Ensure all variables referenced in the expression are bound in the task input"
+
+known_fixes_in_this_version:
+  - summary: "DO_WHILE + SWITCH: premature iteration advancement when async task completed before successor scheduled"
+    fixed_in: "commit 69faed274 (PR #1001)"
+    issues: ["conductor-oss/conductor#895"]
+  - summary: "SWITCH empty matched case no longer falls through to defaultCase"
+    fixed_in: "3.31.0 (#1159)"
+  - summary: "DO_WHILE iteration list truncation"
+    fixed_in: "3.31.0 (#1172)"
+  - summary: "Nested JOIN tasks transitively reset after sub-workflow restart"
+    fixed_in: "3.31.0 (#1212)"
+  - summary: "DO_WHILE nested loopCondition TypeError (BUG-1 of #1307)"
+    fixed_in: "current source DoWhile.java lines 521-523"
+    issues: ["conductor-oss/conductor#1307"]
