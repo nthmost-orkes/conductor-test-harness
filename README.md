@@ -2,6 +2,9 @@
 
 A versioned capabilities catalog and SDK audit harness for Conductor OSS.
 
+> **Resuming?** See [`NEXT_STEPS.md`](NEXT_STEPS.md) for where the last session left off and the
+> current top task (full-harness pass against v3.4.0, focused on last-RC → 3.4.0 diffs).
+
 Two primary purposes:
 
 1. **Capabilities catalog** — machine-readable ground truth of what each server version
