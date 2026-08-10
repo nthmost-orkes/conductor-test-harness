@@ -55,17 +55,28 @@ note on conductor-cli#97.)
 
 ## Still open on v3.4.0
 
-### ⚠️ ISSUE-4 — `doctor` reports client-shell env, not server providers
-On v3.4.0 this is now *doubly* misleading: `doctor` reported **OpenAI "ok"** (client shell has
-the key) even though OpenAI calls **fail server-side** (this project has no `gpt-4o` access, a
-403), and reported **Anthropic unconfigured** even though the server has it and ran an Anthropic
-agent green. `doctor` should read `GET /api/providers/status` for the AI-provider section.
-- Repo: **conductor-cli** · `cmd/doctor.go`
+### ⚠️ ISSUE-4 — `doctor` reports client-shell env, not the server it targets
+`doctor`'s "AI Providers" section reads only `os.Getenv(...)` (`cmd/doctor.go`) and never calls
+`/api/providers/status`. Concrete repro: pointed at the 7010 server (openai, anthropic,
+perplexity, huggingface, ollama all configured), a shell with the provider vars unset prints
+**"0 AI provider(s) configured"** — yet `agent run` on that server works. `doctor` prints the
+server URL one line above the provider list, so the list reads as the server's. It should also
+surface `GET /api/providers/status`. (The client-env check is legitimate for the local
+deploy/runtime path — keep both, don't replace.)
+- Repo: **conductor-cli** · `cmd/doctor.go` · framing: enhancement
 
-### ⚠️ ISSUE-5 — Streamed `[error]` events carry an empty message
-Still reproduces on v3.4.0: a failed run streams `[error]` with no text; the cause is only
-visible via `agent status` (`reasonForIncompletion`).
-- Repo: **conductor-cli** (event render) and/or **conductor** (SSE payload)
+### ⚠️ ISSUE-5 — `[thinking]` and `[error]` stream lines render empty (CLI reads wrong field)
+Root-caused on v3.4.0: `terminalSink` (`cmd/agent_stream.go`) reads `mapStr(data, "message")`
+for `EventThinking` (L110) and `EventError` (L128), but the server's SSE payload puts the text in
+**`content`**. Captured raw from `/api/agent/stream/{id}`:
+```
+event:error
+data:{"type":"error","content":"Task … failed … reason: 'Task execution failed: 404 - model … not found'","toolName":"workflow"}
+```
+So the reason is in the stream but discarded — `[error]`/`[thinking]` print blank. `EventMessage`
+already reads `content` and works. Fix: read `content`; audit tool/handoff/guardrail/waiting for
+the same mismatch. **Not a server bug** — payload is complete.
+- Repo: **conductor-cli** · `cmd/agent_stream.go`
 
 ### ℹ️ Minor
 `prune --older-than` (int days) vs `execution --since` (duration strings) — inconsistent units;
