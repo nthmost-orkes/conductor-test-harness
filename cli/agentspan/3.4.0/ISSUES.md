@@ -15,13 +15,13 @@ Status key: `[x]` filed · `[✓]` fixed/closed · `[~]` verified by live test
 
 ## Still open
 
-- [ ] [~] **doctor reports client-shell env, not the server it targets** (conductor-cli, `cmd/doctor.go`).
+- [x] [~] **conductor-cli#117 — doctor reports client-shell env, not the server it targets** (conductor-cli, `cmd/doctor.go`).
   The "AI Providers" section reads only `os.Getenv(...)` and never calls `/api/providers/status`.
   Repro: pointed at a server with openai/anthropic/perplexity/huggingface/ollama configured, a clean
   shell prints **"0 AI provider(s) configured"** — while `agent run` on that server works. It shows the
   server URL one line above, so users read the provider list as the server's. Enhancement: also surface
   `/api/providers/status`. (Client-env check is legitimate for the local deploy/runtime path — keep both.)
-- [ ] [~] **stream renderer reads wrong field names (systemic)** (conductor-cli, `cmd/agent_stream.go`).
+- [x] [~] **conductor-cli#116 — stream renderer reads wrong field names (systemic)** (conductor-cli, `cmd/agent_stream.go`).
   `terminalSink` field names don't match the server SSE schema (`AgentSSEEvent`): thinking/error read
   `message` (server: `content`), toolCall input reads `input` (server: `args`), handoff reads `agentName`
   (server: `target`), guardrail-fail reads `reason` (no such field). So `[error]`/`[thinking]` (and tool
