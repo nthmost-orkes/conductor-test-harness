@@ -59,6 +59,9 @@ CONDUCTOR_SERVER=http://localhost:7010 CLI=/path/to/conductor scripts/agent-matr
 
 # or target specific models
 CONDUCTOR_SERVER=http://localhost:7010 scripts/agent-matrix.sh litellm/gpt4 ollama/gemma3:12b
+
+# 3. stop the server when done
+scripts/stop-test-server.sh --port 7010
 ```
 
 ## Notes
