@@ -21,13 +21,13 @@ Status key: `[x]` filed · `[✓]` fixed/closed · `[~]` verified by live test
   shell prints **"0 AI provider(s) configured"** — while `agent run` on that server works. It shows the
   server URL one line above, so users read the provider list as the server's. Enhancement: also surface
   `/api/providers/status`. (Client-env check is legitimate for the local deploy/runtime path — keep both.)
-- [ ] [~] **streamed `[thinking]` and `[error]` render empty — CLI reads the wrong field** (conductor-cli, `cmd/agent_stream.go`).
-  `terminalSink` does `mapStr(data, "message")` for `EventThinking` (L110) and `EventError` (L128), but the
-  server's SSE payload carries the text in **`content`** (confirmed via raw `/api/agent/stream/{id}`:
-  `event:error … data:{"type":"error","content":"Task … failed … reason: '…'"}`). So the failure reason is
-  present in the stream but discarded; `[error]`/`[thinking]` print blank. Fix: read `content` (as
-  `EventMessage` already does). Also audit tool/handoff/guardrail/waiting renderers for the same mismatch.
-  NOT a server bug — the payload is complete.
+- [ ] [~] **stream renderer reads wrong field names (systemic)** (conductor-cli, `cmd/agent_stream.go`).
+  `terminalSink` field names don't match the server SSE schema (`AgentSSEEvent`): thinking/error read
+  `message` (server: `content`), toolCall input reads `input` (server: `args`), handoff reads `agentName`
+  (server: `target`), guardrail-fail reads `reason` (no such field). So `[error]`/`[thinking]` (and tool
+  input, handoff target, guardrail reason) print blank — the failure reason is in the stream but discarded.
+  thinking/error confirmed live; the rest from the schema. Fix: align each renderer with `AgentSSEEvent`.
+  NOT a server bug — payload is complete. Full table in FINDINGS.md.
 - [ ] **prune `--older-than` int-days vs `execution --since` durations**; `prune --dry-run` reports no count (minor).
 
 ## Not yet covered

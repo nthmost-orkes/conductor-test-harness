@@ -65,17 +65,31 @@ surface `GET /api/providers/status`. (The client-env check is legitimate for the
 deploy/runtime path — keep both, don't replace.)
 - Repo: **conductor-cli** · `cmd/doctor.go` · framing: enhancement
 
-### ⚠️ ISSUE-5 — `[thinking]` and `[error]` stream lines render empty (CLI reads wrong field)
-Root-caused on v3.4.0: `terminalSink` (`cmd/agent_stream.go`) reads `mapStr(data, "message")`
-for `EventThinking` (L110) and `EventError` (L128), but the server's SSE payload puts the text in
-**`content`**. Captured raw from `/api/agent/stream/{id}`:
+### ⚠️ ISSUE-5 — Stream renderer reads several wrong field names (systemic)
+`terminalSink` (`cmd/agent_stream.go`) reads field names that don't match the server's SSE schema
+(`common/.../agent/AgentSSEEvent.java`: `content, toolName, args, result, target, output,
+guardrailName`). Mismatched renderers emit blank text — most importantly the failure reason.
+
+| Event | CLI reads | Server field | Status |
+|---|---|---|---|
+| thinking | `message` | `content` | ❌ empty (confirmed live) |
+| error | `message` | `content` | ❌ empty (confirmed live) |
+| toolCall input | `input` | `args` | ❌ empty (schema) |
+| handoff | `agentName` | `target` | ❌ empty (schema) |
+| guardrail fail reason | `reason` | *(no `reason` field)* | ❌ empty (schema) |
+| toolResult | `result` | `result` | ✅ |
+| message | `content` | `content` | ✅ |
+| waiting | `executionId` | `executionId` | ✅ |
+| guardrail pass | `guardrailName` | `guardrailName` | ✅ |
+| done | `output` | `output` | ✅ |
+
+Raw proof for `error` (via `/api/agent/stream/{id}`):
 ```
 event:error
 data:{"type":"error","content":"Task … failed … reason: 'Task execution failed: 404 - model … not found'","toolName":"workflow"}
 ```
-So the reason is in the stream but discarded — `[error]`/`[thinking]` print blank. `EventMessage`
-already reads `content` and works. Fix: read `content`; audit tool/handoff/guardrail/waiting for
-the same mismatch. **Not a server bug** — payload is complete.
+The failure reason is in the stream but discarded. **Not a server bug** — payload is complete; the
+CLI just reads the wrong keys. Fix: align each renderer with `AgentSSEEvent` field names.
 - Repo: **conductor-cli** · `cmd/agent_stream.go`
 
 ### ℹ️ Minor
