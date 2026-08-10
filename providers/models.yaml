@@ -1,0 +1,68 @@
+# Model catalog for agentspan testing.
+#
+# Each entry's `model:` is exactly what goes in an agent config's `model:` field
+# (agentspan parses "provider/model" by splitting on the FIRST "/", so LiteLLM
+# model ids that themselves contain "/" are fine — e.g. litellm/heavy/reasoning).
+#
+# Endpoints are resolved by the server from providers/secrets.env at startup:
+#   anthropic -> ANTHROPIC_API_KEY
+#   openai    -> OPENAI_API_KEY
+#   ollama    -> conductor.ai.ollama.baseURL   (OLLAMA_BASE_URL, single host)
+#   litellm   -> conductor.ai.litellm.baseURL  (LITELLM_BASE_URL, one router)
+#
+# NOTE: the server binds exactly ONE ollama baseURL and ONE litellm baseURL at a
+# time. To reach both loki and spartacus at once, prefer the LiteLLM router — it
+# already federates both hosts (+ cloud). Point LITELLM_BASE_URL at the spartacus
+# router (the superset) to get everything through `litellm/*`.
+
+# ---- Cloud providers (keys in secrets.env) ----
+claude:
+  model: anthropic/claude-haiku-4-5-20251001
+  requires: ANTHROPIC_API_KEY
+  note: primary green provider in this env
+
+chatgpt:                                # ✅ green with the dedicated harness key
+  model: openai/gpt-4o
+  requires: OPENAI_API_KEY
+  note: >
+    verified green (openai/gpt-4o → PING7). A key without gpt-4o access returns HTTP 403
+    model_not_found — the same applies via litellm-gpt4 (that router group routes to OpenAI).
+
+# ---- LiteLLM routers (federate loki + spartacus + cloud; no key needed on-LAN) ----
+# Wire LITELLM_BASE_URL to the spartacus router for the fullest model set.
+# Verified 2026-08-10 against the spartacus router:
+litellm-gemma3-12b:                     # ✅ green
+  model: litellm/loki/gemma3-12b
+  via: LITELLM_BASE_URL
+litellm-gpt-oss:                        # ✅ green
+  model: litellm/loki/gpt-oss
+  via: LITELLM_BASE_URL
+litellm-qwen-coder-30b:
+  model: litellm/loki/qwen3-coder-30b
+  via: LITELLM_BASE_URL
+litellm-gpt4:                           # ⚠️ router routes gpt4→OpenAI gpt-4-turbo; 403 (account, not wiring)
+  model: litellm/gpt4
+  via: LITELLM_BASE_URL
+litellm-heavy-reasoning:                # ⚠️ router 'heavy/reasoning' backend group not serving here
+  model: litellm/heavy/reasoning
+  via: LITELLM_BASE_URL
+
+# ---- Direct Ollama (server binds ONE OLLAMA_BASE_URL; default loki) ----
+ollama-llama31-8b:
+  model: ollama/llama3.1:8b
+  via: OLLAMA_BASE_URL
+  hosts: [loki.local:11434, spartacus.local:11434]
+ollama-gemma3:
+  model: ollama/gemma3:12b
+  via: OLLAMA_BASE_URL
+  hosts: [loki.local:11434]
+ollama-deepseek-r1-7b:
+  model: ollama/deepseek-r1:7b
+  via: OLLAMA_BASE_URL
+  hosts: [loki.local:11434]
+
+# Discovered live 2026-08-10:
+#   loki.local:11434     gemma3:12b, llama3.1:8b, qwen2.5-coder:14b, qwen3-coder:30b, gpt-oss:latest, deepseek-r1:7b
+#   spartacus.local:11434 gemma3:27b, qwen3:14b, qwen2.5-coder:14b, llama3.1:8b, llama2:13b-chat, llama3:8b
+#   loki.local:4000       loki/gemma3-12b, spartacus/gemma3-27b, styx/mistral-small-24b, heavy/reasoning
+#   spartacus.local:4000  gpt4, heavy/reasoning, heavy/coding, loki/*, local/llama-70b, local/mistral-24b, ...

@@ -5,3 +5,9 @@ server/*/kitchen-sink/battery_report_*.json
 __pycache__/
 *.pyc
 *.pyo
+
+# Local provider secrets — NEVER commit real keys
+providers/secrets.env
+
+# Local test-server run dir (jars, sqlite, logs)
+.run/
