@@ -44,13 +44,19 @@ conductor-test-harness/
 │       ├── FEATURE_MATRIX.md
 │       ├── BUGS.md                Server-side bugs found at this version
 │       └── kitchen-sink/          Raw JSON battery — tests all task types via curl
-└── sdk/
-    ├── python/3.32.0-rc.9/
-    ├── java/3.32.0-rc.9/
-    ├── javascript/3.32.0-rc.9/
-    ├── go/3.32.0-rc.9/
-    ├── csharp/3.32.0-rc.9/
-    └── ruby/3.32.0-rc.9/
+│   ├── 3.4.0/                     Current "Latest" stable (scheme reset from 3.32.0-rc.*)
+│   │   └── CHANGES.md
+├── sdk/
+│   ├── python/3.32.0-rc.9/
+│   ├── java/3.32.0-rc.9/
+│   ├── javascript/3.32.0-rc.9/
+│   ├── go/3.32.0-rc.9/
+│   ├── csharp/3.32.0-rc.9/
+│   └── ruby/3.32.0-rc.9/
+└── cli/
+    └── agentspan/
+        ├── 3.4.0/                   Current baseline — FINDINGS/ISSUES/AGENT_CAPABILITIES/live_test.sh
+        └── 3.32.0-rc.9/             Historical (bugs since fixed; see 3.4.0)
 ```
 
 Each `sdk/<language>/<server-version>/` directory contains:
@@ -128,6 +134,36 @@ All issues mention "Conductor OSS 3.32.0-rc.9" as the tested baseline.
 | [Ruby](sdk/ruby/3.32.0-rc.9/ISSUES.md) | [#23–#25](https://github.com/conductor-oss/ruby-sdk/issues) (3) | ✅ complete | Deprecated dynamic fork field, SWITCH JS evaluator hardcoded, missing NOOP/EXCLUSIVE_JOIN DSL + AGENT constants |
 
 **Total: 30 issues filed across 6 SDKs.**
+
+### CLI / agentspan audit
+
+The `conductor agent` operator surface (`conductor-oss/conductor-cli`) is audited against a live
+server. **Current baseline: [`cli/agentspan/3.4.0/`](cli/agentspan/3.4.0/)**
+(`FINDINGS.md`, `ISSUES.md`, `AGENT_CAPABILITIES.md`, `live_test.sh`). The original
+[`3.32.0-rc.9`](cli/agentspan/3.32.0-rc.9/) run is kept for history.
+
+**Filed and now fixed (confirmed on v3.4.0):**
+
+| Finding | Repo/issue | Status |
+|---|---|---|
+| `agent compile` sent bare config → 500 (needed `{"agentConfig":…}`) | conductor-cli#96 | ✅ fixed |
+| `agent execution --since/--window` returned zero | conductor-cli#97 | ✅ fixed (`--window` needed the v3.4.0 server search fix) |
+| Server didn't trim provider API keys (trailing `\n` → `Authorization` error) | conductor#1437 | ✅ fixed (trim at ingestion) |
+| A2A server REST layer wouldn't enable via config (rc.9 blocker) | — | ✅ resolved in v3.4.0 |
+
+**Still open on v3.4.0:**
+
+| Finding | Severity |
+|---|---|
+| `doctor` reports client-shell provider env, not server `/api/providers/status` (doubly misleading on v3.4.0) | medium |
+| Streamed `[error]` events carry an empty message (cause only via `agent status`) | medium |
+| `prune --older-than` int-days vs `execution --since` durations; `--dry-run` reports no count | low |
+
+**Live-confirmed on v3.4.0:** an Anthropic agent runs green end-to-end via the CLI, and the full
+A2A round-trip works — a workflow exposed as an A2A agent driven by
+`GET_AGENT_CARD` / `AGENT` / `CANCEL_AGENT`, including inside `FORK_JOIN` (distinct remote
+taskIds) and `DO_WHILE`. (OpenAI runs 403 here — the test project lacks `gpt-4o` access, an
+account limitation, not a bug.)
 
 The Ruby SDK is the only one that correctly infers `joinOn` from fork branches in its
 `parallel` block — the bug that affected every other SDK.
