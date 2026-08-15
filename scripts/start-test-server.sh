@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start a local Conductor test server wired to all agentspan providers from
 # providers/secrets.env (Claude, ChatGPT, Ollama on loki/spartacus, a LiteLLM router),
-# with the A2A server enabled. Proven config method for v3.4.0: an application.properties
+# with the A2A server enabled. Proven config method for 3.32.x: an application.properties
 # in the run dir (loads at the phase the A2A/AI conditions are evaluated).
 #
 # Usage:
@@ -14,7 +14,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SECRETS="$ROOT/providers/secrets.env"
 RUNDIR="$ROOT/.run"
 PORT=7010
-VERSION=3.4.0
+VERSION=3.32.1
 FOREGROUND=0
 while [[ $# -gt 0 ]]; do case "$1" in
   --port) PORT="$2"; shift 2;;

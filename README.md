@@ -3,7 +3,7 @@
 A versioned capabilities catalog and SDK audit harness for Conductor OSS.
 
 > **Resuming?** See [`NEXT_STEPS.md`](NEXT_STEPS.md) for where the last session left off and the
-> current top task (full-harness pass against v3.4.0, focused on last-RC → 3.4.0 diffs).
+> current top task (full-harness pass against v3.32.x, focused on the v3.31.0 → v3.32.0 diff).
 
 Two primary purposes:
 
@@ -47,8 +47,8 @@ conductor-test-harness/
 │       ├── FEATURE_MATRIX.md
 │       ├── BUGS.md                Server-side bugs found at this version
 │       └── kitchen-sink/          Raw JSON battery — tests all task types via curl
-│   ├── 3.4.0/                     Current "Latest" stable (scheme reset from 3.32.0-rc.*)
-│   │   └── CHANGES.md
+│   └── 3.32.0/                     Current stable (3.32.0-rc.* graduated; v3.4.0 was a retracted tag)
+│       └── CHANGES.md               (full catalog TODO — see NEXT_STEPS.md)
 ├── sdk/
 │   ├── python/3.32.0-rc.9/
 │   ├── java/3.32.0-rc.9/
@@ -58,8 +58,8 @@ conductor-test-harness/
 │   └── ruby/3.32.0-rc.9/
 └── cli/
     └── agentspan/
-        ├── 3.4.0/                   Current baseline — FINDINGS/ISSUES/AGENT_CAPABILITIES/live_test.sh
-        └── 3.32.0-rc.9/             Historical (bugs since fixed; see 3.4.0)
+        ├── 3.32.0/                   Current baseline — FINDINGS/ISSUES/AGENT_CAPABILITIES/live_test.sh
+        └── 3.32.0-rc.9/             Historical (bugs since fixed; see 3.32.0)
 ```
 
 Each `sdk/<language>/<server-version>/` directory contains:
@@ -141,32 +141,32 @@ All issues mention "Conductor OSS 3.32.0-rc.9" as the tested baseline.
 ### CLI / agentspan audit
 
 The `conductor agent` operator surface (`conductor-oss/conductor-cli`) is audited against a live
-server. **Current baseline: [`cli/agentspan/3.4.0/`](cli/agentspan/3.4.0/)**
+server. **Current baseline: [`cli/agentspan/3.32.0/`](cli/agentspan/3.32.0/)**
 (`FINDINGS.md`, `ISSUES.md`, `AGENT_CAPABILITIES.md`, `live_test.sh`). The original
 [`3.32.0-rc.9`](cli/agentspan/3.32.0-rc.9/) run is kept for history.
 
-**Filed and now fixed (confirmed on v3.4.0):**
+**Filed and now fixed (confirmed on v3.32.0):**
 
 | Finding | Repo/issue | Status |
 |---|---|---|
 | `agent compile` sent bare config → 500 (needed `{"agentConfig":…}`) | conductor-cli#96 | ✅ fixed |
-| `agent execution --since/--window` returned zero | conductor-cli#97 | ✅ fixed (`--window` needed the v3.4.0 server search fix) |
+| `agent execution --since/--window` returned zero | conductor-cli#97 | ✅ fixed (`--window` needed the v3.32.0 server search fix) |
 | Server didn't trim provider API keys (trailing `\n` → `Authorization` error) | conductor#1437 | ✅ fixed (trim at ingestion) |
-| A2A server REST layer wouldn't enable via config (rc.9 blocker) | — | ✅ resolved in v3.4.0 |
+| A2A server REST layer wouldn't enable via config (rc.9 blocker) | — | ✅ resolved in v3.32.0 |
 
-**Still open on v3.4.0:**
+**Still open on v3.32.0:**
 
 | Finding | Severity |
 |---|---|
-| `doctor` reports client-shell provider env, not server `/api/providers/status` (doubly misleading on v3.4.0) | medium |
+| `doctor` reports client-shell provider env, not server `/api/providers/status` (doubly misleading on v3.32.0) | medium |
 | Streamed `[error]` events carry an empty message (cause only via `agent status`) | medium |
 | `prune --older-than` int-days vs `execution --since` durations; `--dry-run` reports no count | low |
 
-**Live-confirmed on v3.4.0:** an Anthropic agent runs green end-to-end via the CLI, and the full
+**Live-confirmed on v3.32.0:** an Anthropic agent runs green end-to-end via the CLI, and the full
 A2A round-trip works — a workflow exposed as an A2A agent driven by
 `GET_AGENT_CARD` / `AGENT` / `CANCEL_AGENT`, including inside `FORK_JOIN` (distinct remote
-taskIds) and `DO_WHILE`. (OpenAI runs 403 here — the test project lacks `gpt-4o` access, an
-account limitation, not a bug.)
+taskIds) and `DO_WHILE`. The provider matrix (`scripts/agent-matrix.sh`) runs 5/5 green:
+Claude, ChatGPT (gpt-4o), LiteLLM→local ×2, and direct Ollama on loki.
 
 The Ruby SDK is the only one that correctly infers `joinOn` from fork branches in its
 `parallel` block — the bug that affected every other SDK.

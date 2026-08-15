@@ -1,6 +1,6 @@
-> **Historical (2026-07-30).** Superseded by [`../3.4.0/`](../3.4.0/). The two CLI bugs
+> **Historical (2026-07-30).** Superseded by [`../3.32.0/`](../3.32.0/). The two CLI bugs
 > (compile #96, execution #97) and the server key-trim bug (#1437) below are **fixed**; the A2A
-> "BLOCKER-1" is **resolved** in v3.4.0. Kept for the record.
+> "BLOCKER-1" is **resolved** in v3.32.0. Kept for the record.
 
 # conductor-cli agentspan — Findings
 

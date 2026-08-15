@@ -1,13 +1,13 @@
-# AGENT task family (A2A) — Capability Checks (v3.4.0)
+# AGENT task family (A2A) — Capability Checks (v3.32.0)
 
-Server baseline: Conductor **v3.4.0**
+Server baseline: Conductor **v3.32.0**
 Date: 2026-08-10
-Test server: local v3.4.0 boot jar on `:7003`, SQLite, with
+Test server: local v3.32.0 boot jar on `:7003`, SQLite, with
 `conductor.integrations.ai.enabled=true`, `conductor.a2a.server.enabled=true`,
 `conductor.a2a.server.expose-all=true`, `conductor.a2a.client.allow-private-network=true`.
 
 **Headline: every AGENT/A2A capability the catalog lists is now live-confirmed.** The
-`3.32.0-rc.9` blocker (A2A server REST layer wouldn't register) is resolved in v3.4.0, so a full
+`3.32.0-rc.9` blocker (A2A server REST layer wouldn't register) is resolved in v3.32.0, so a full
 self-hosted round-trip works: a Conductor workflow is exposed as an A2A agent and driven by
 `GET_AGENT_CARD` / `AGENT` / `CANCEL_AGENT` tasks — including inside `FORK_JOIN` and `DO_WHILE`.
 
@@ -26,7 +26,7 @@ Legend: ✅ live-confirmed.
 
 ## How the round-trip was set up
 
-1. Enabled the A2A server + private-network on a v3.4.0 instance (the exact flags that were
+1. Enabled the A2A server + private-network on a v3.32.0 instance (the exact flags that were
    inert on the rc.9 jar).
 2. Registered a trivial workflow `a2a_echo_wf`; with `expose-all=true` it is served as an A2A
    agent at `http://localhost:7003/api/a2a/workflow/a2a_echo_wf`.

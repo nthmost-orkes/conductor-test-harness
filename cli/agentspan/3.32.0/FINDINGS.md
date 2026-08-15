@@ -1,15 +1,16 @@
-# conductor-cli agentspan — Findings (v3.4.0 baseline)
+# conductor-cli agentspan — Findings (v3.32.0 baseline)
 
 CLI: `conductor-oss/conductor-cli` @ `main` (b21bc31), built from source
-Server baseline: Conductor **v3.4.0** (the current "Latest" stable)
+Server baseline: Conductor **v3.32.0** (the graduated stable of the `3.32.0-rc.*` line; current Latest is v3.32.1)
 Analysis date: 2026-08-10
-Test server: local v3.4.0 boot jar on `http://localhost:7003/api`, SQLite, both providers configured
+Test server: local SQLite boot jar on `http://localhost:7003/api`, both providers configured
 
-> **Version scheme note.** Conductor OSS now publishes **v3.4.0** as the "Latest" stable
-> (2026-08-07), while the old `3.32.0-rc.*` prerelease line continued to `rc.24`. Numerically
-> `3.4.0 < 3.32.0`, so this reads as a **scheme reset to a clean `3.4.x` stable**, not a
-> `3.32 → 3.33` bump. The `TaskType` enum is unchanged from `3.32.0-rc.9`, so the capability
-> catalog content still holds. The prior baseline lives at `../3.32.0-rc.9/` (historical).
+> **Provenance / versioning note.** These findings were validated against the boot jar originally
+> tagged **v3.4.0** — a transient tag that was later **retracted** (its release now 404s). That
+> build is the same codebase that shipped as **v3.32.0** stable (the `3.32.0-rc.*` line graduating
+> to release), so the findings apply to 3.32.0/3.32.1. The `TaskType` enum is unchanged from
+> `3.32.0-rc.9`, so the capability-catalog content still holds. Prior baseline: `../3.32.0-rc.9/`
+> (historical).
 
 This baseline supersedes `3.32.0-rc.9`: the two CLI bugs and the server key-trim bug filed
 there are now fixed, and the A2A-server blocker is resolved. See `AGENT_CAPABILITIES.md` for
@@ -17,7 +18,7 @@ the full A2A round-trip results.
 
 ---
 
-## Command coverage (v3.4.0)
+## Command coverage (v3.32.0)
 
 | Command | Result | Notes |
 |---|---|---|
@@ -28,7 +29,7 @@ the full A2A round-trip results.
 | `agent status` | ✅ | |
 | `agent execution` (`--name`, `--status`) | ✅ | |
 | `agent execution --since` | ✅ **fixed** | All formats return matches. (was #97) |
-| `agent execution --window now-X` | ✅ **fixed (server)** | Works on the v3.4.0 server; the rc.9 residual was a server search limit — see below. |
+| `agent execution --window now-X` | ✅ **fixed (server)** | Works on the v3.32.0 server; the rc.9 residual was a server search limit — see below. |
 | `agent list` / `get` / `delete` | ✅ | `delete` correctly 400s on a missing agent (not idempotent). |
 | `agent prune --dry-run` | ✅ | `--older-than` still int-days vs `--since` durations (minor). |
 | `doctor` | ⚠️ | Still reports client-shell provider env, not server providers (ISSUE-4) — now *doubly* misleading, see below. |
@@ -40,20 +41,20 @@ the full A2A round-trip results.
 ## Resolved since the 3.32.0-rc.9 baseline
 
 - **compile envelope — conductor-cli#96** (closed Aug 7). CLI now wraps the config; `agent compile` returns the workflow. Live-confirmed.
-- **execution time filter — conductor-cli#97** (closed Aug 10). `--since` fixed. `--window` also works against the v3.4.0 server (see next), so it's effectively resolved on current.
+- **execution time filter — conductor-cli#97** (closed Aug 10). `--since` fixed. `--window` also works against the v3.32.0 server (see next), so it's effectively resolved on current.
 - **provider key trimming — conductor#1437** (closed Aug 5). Fixed at ingestion (`AgentspanAIModelProvider` + provider keys). Live-confirmed indirectly: a trailing-newline key no longer throws `Unexpected char 0x0a`; the key reaches OpenAI and gets a normal API response.
-- **A2A server exposure (BLOCKER-1 from rc.9)**. `/api/a2a/workflow` returns 200 on v3.4.0 with the same flags that 404'd on the rc.9 jar. Full A2A round-trip now works — see `AGENT_CAPABILITIES.md`.
+- **A2A server exposure (BLOCKER-1 from rc.9)**. `/api/a2a/workflow` returns 200 on v3.32.0 with the same flags that 404'd on the rc.9 jar. Full A2A round-trip now works — see `AGENT_CAPABILITIES.md`.
 
-### `--window` was a server-side search limit, fixed in v3.4.0
+### `--window` was a server-side search limit, fixed in v3.32.0
 On the rc.9 server, `--window now-X` always returned zero. Isolated cause: the SQLite
 `/workflow/search` could not intersect two range predicates on the same field
-(`startTime>A AND startTime<B` → 0, though each bound worked alone). On the **v3.4.0 server the
+(`startTime>A AND startTime<B` → 0, though each bound worked alone). On the **v3.32.0 server the
 same intersection returns the expected rows**, so `--window` now works. (Tracked as a follow-up
 note on conductor-cli#97.)
 
 ---
 
-## Still open on v3.4.0
+## Still open on v3.32.0
 
 ### ⚠️ ISSUE-4 — `doctor` reports client-shell env, not the server it targets
 `doctor`'s "AI Providers" section reads only `os.Getenv(...)` (`cmd/doctor.go`) and never calls

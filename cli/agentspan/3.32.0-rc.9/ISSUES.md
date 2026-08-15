@@ -1,5 +1,5 @@
-> **Historical (2026-07-30).** Superseded by [`../3.4.0/ISSUES.md`](../3.4.0/ISSUES.md).
-> #96/#97/#1437 are fixed and the A2A blocker resolved in v3.4.0.
+> **Historical (2026-07-30).** Superseded by [`../3.32.0/ISSUES.md`](../3.32.0/ISSUES.md).
+> #96/#97/#1437 are fixed and the A2A blocker resolved in v3.32.0.
 
 # conductor-cli agentspan — Issues Punch List
 

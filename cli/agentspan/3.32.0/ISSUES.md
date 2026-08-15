@@ -1,6 +1,6 @@
-# conductor-cli agentspan — Issues Punch List (v3.4.0)
+# conductor-cli agentspan — Issues Punch List (v3.32.0)
 
-Server baseline: Conductor **v3.4.0**. Supersedes `../3.32.0-rc.9/ISSUES.md`.
+Server baseline: Conductor **v3.32.0**. Supersedes `../3.32.0-rc.9/ISSUES.md`.
 
 Status key: `[x]` filed · `[✓]` fixed/closed · `[~]` verified by live test
 
@@ -9,9 +9,9 @@ Status key: `[x]` filed · `[✓]` fixed/closed · `[~]` verified by live test
 ## Fixed since 3.32.0-rc.9
 
 - [✓][~] **conductor-cli#96 — `agent compile` 500** → wraps `{"agentConfig":…}`; returns workflow. (closed Aug 7)
-- [✓][~] **conductor-cli#97 — `agent execution --since/--window`** → `--since` fixed; `--window` works on the v3.4.0 server. (closed Aug 10; follow-up note left re: `--window`/server search)
+- [✓][~] **conductor-cli#97 — `agent execution --since/--window`** → `--since` fixed; `--window` works on the v3.32.0 server. (closed Aug 10; follow-up note left re: `--window`/server search)
 - [✓][~] **conductor#1437 — provider keys not trimmed** → stripped at ingestion; newline key no longer breaks the auth header. (closed Aug 5)
-- [✓][~] **BLOCKER-1 — A2A server REST layer wouldn't enable** → `/api/a2a/workflow` returns 200 on v3.4.0; full round-trip works.
+- [✓][~] **BLOCKER-1 — A2A server REST layer wouldn't enable** → `/api/a2a/workflow` returns 200 on v3.32.0; full round-trip works.
 
 ## Still open
 

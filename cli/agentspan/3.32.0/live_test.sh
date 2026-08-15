@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# conductor-cli agentspan — Live Operator Smoke + A2A Round-Trip (v3.4.0)
-# Server baseline: Conductor v3.4.0.
+# conductor-cli agentspan — Live Operator Smoke + A2A Round-Trip (v3.32.0)
+# Server baseline: Conductor v3.32.0.
 # For the A2A round-trip, the server must run with:
 #   conductor.integrations.ai.enabled=true
 #   conductor.a2a.server.enabled=true
@@ -44,7 +44,7 @@ echo "== #97 execution --since AND --window both return rows =="
 S=$("$CLI" agent execution --since 1h 2>&1 | grep -c harness_smoke_340)
 W=$("$CLI" agent execution --window now-1h 2>&1 | grep -c harness_smoke_340)
 [[ "$S" -gt 0 ]] && pass "--since 1h returns rows ($S)" || fail "--since" "empty"
-[[ "$W" -gt 0 ]] && pass "--window now-1h returns rows ($W)" || fail "--window" "empty (rc.9 server bug — needs v3.4.0)"
+[[ "$W" -gt 0 ]] && pass "--window now-1h returns rows ($W)" || fail "--window" "empty (rc.9 server bug — needs v3.32.0)"
 
 echo "== get / delete round-trip =="
 "$CLI" agent get harness_smoke_340 2>&1 | grep -q harness_smoke_340 && pass "registered (get)" || fail "get" "missing"
