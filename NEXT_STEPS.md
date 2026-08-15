@@ -22,26 +22,33 @@
 ## Next: run the FULL harness against v3.4.0 — focus on last-RC → 3.4.0 diffs
 
 The agentspan/CLI slice is done. The remaining work is the **whole-harness** pass against the
-v3.4.0 stable, with special attention to what changed between the final RC of the old line and the
-3.4.0 cut.
+current stable, diffing **stable minor → stable minor** (not RC → stable).
 
-1. **Pin the diff endpoints.** "Last RC" is a moving target: the `3.32.0-rc.*` line kept advancing
-   *after* 3.4.0 shipped — as of 2026-08-11 the newest is **v3.32.0-rc.25** (2026-08-10), vs 3.4.0
-   (2026-08-07). Decide with the team whether the intended comparison is `3.4.0` vs the last RC
-   *before* the cut (**v3.32.0-rc.24**, 2026-08-06) or vs the newest RC (**rc.25**). Default to
-   **rc.24 → 3.4.0** (what actually became the stable), and note rc.25 separately.
+> **Versioning update (2026-08-15).** `v3.4.0` was **pulled** (its GitHub release now 404s; only
+> the git tag lingers) — it was an anomalous tag, not the mainline. The `3.32.0-rc.*` line
+> **graduated to stable**: **v3.32.0** (2026-08-11), **v3.32.1** (2026-08-12, now *Latest*),
+> **v3.32.2** draft. So the real target is the **3.32.x** line, and the diff is clean stable-to-stable.
+>
+> **Action item — re-base the 3.4.0 work.** `server/3.4.0/` and `cli/agentspan/3.4.0/` are pinned to
+> a retracted release. Re-label to **3.32.0** (or 3.32.1). The code we tested as "3.4.0" is
+> essentially what shipped as 3.32.0 stable, so the findings carry over — only the labels are wrong.
+
+1. **Diff endpoints = last stable minor → new stable minor: `v3.31.0 → v3.32.0`** (track `v3.32.1`
+   as the current patch). No RCs. All tags exist on origin.
 2. **Diff the source.** In the `conductor` repo:
-   `git fetch --tags && git diff v3.32.0-rc.24 v3.4.0 -- common/.../tasks/TaskType.java`
-   plus the mapper/model classes. (rc.9 → 3.4.0 TaskType was unchanged; verify rc.24 → 3.4.0 too.)
-   Capture new/removed task types, field renames, behavioral/breaking changes — SDK-relevant only.
-3. **Build the full `server/3.4.0/` catalog.** It currently has only `CHANGES.md`. Adapt from the
-   last full catalog (`server/3.32.0-rc.9/`) applying verified diffs: `capabilities.yaml`,
-   `FEATURE_MATRIX.md`, `BUGS.md`, and a `kitchen-sink/` copy. Follow
-   [`AGENTS.md`](AGENTS.md) → "how to add a new server version".
-4. **Run the kitchen-sink battery** against a live v3.4.0 server:
-   `CONDUCTOR_SERVER=http://localhost:7010 python3 server/3.4.0/kitchen-sink/run_battery.py`
-   Compare pass/fail against rc.9's battery; record regressions/fixes in `server/3.4.0/BUGS.md`.
-5. **(Optional) Re-run the SDK live tests** (`sdk/<lang>/.../live_test.*`) against v3.4.0 to refresh
+   `git fetch --tags && git diff v3.31.0 v3.32.0 -- common/.../tasks/TaskType.java`
+   plus the mapper/model classes. This is a *large* delta — the whole agent/A2A/LLM-task/agentspan
+   body of work landed across the 3.32 cycle. Capture new/removed task types, field renames,
+   behavioral/breaking changes — SDK-relevant only.
+3. **Build the full `server/3.32.0/` catalog** (rename the `3.4.0` stub). Adapt from the last full
+   catalog (`server/3.32.0-rc.9/`) — which already captured most of the agent-family additions —
+   applying verified diffs: `capabilities.yaml`, `FEATURE_MATRIX.md`, `BUGS.md`, `kitchen-sink/`.
+   Follow [`AGENTS.md`](AGENTS.md) → "how to add a new server version".
+4. **Run the kitchen-sink battery** against a live 3.32.x server
+   (`scripts/start-test-server.sh --version 3.32.1 --port 7010`):
+   `CONDUCTOR_SERVER=http://localhost:7010 python3 server/3.32.0/kitchen-sink/run_battery.py`
+   Compare pass/fail against rc.9's battery; record regressions/fixes in `server/3.32.0/BUGS.md`.
+5. **(Optional) Re-run the SDK live tests** (`sdk/<lang>/.../live_test.*`) against 3.32.x to refresh
    the SDK audit rows for the new baseline.
 
 ## Environment / pointers for resuming
