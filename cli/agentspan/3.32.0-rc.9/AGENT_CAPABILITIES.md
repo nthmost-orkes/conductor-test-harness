@@ -1,6 +1,6 @@
 > **Historical (2026-07-30).** Superseded by
-> [`../3.4.0/AGENT_CAPABILITIES.md`](../3.4.0/AGENT_CAPABILITIES.md). "BLOCKER-1" (A2A server
-> wouldn't enable) is **resolved in v3.4.0**, where the full round-trip — GET_AGENT_CARD / AGENT
+> [`../3.32.0/AGENT_CAPABILITIES.md`](../3.32.0/AGENT_CAPABILITIES.md). "BLOCKER-1" (A2A server
+> wouldn't enable) is **resolved in v3.32.0**, where the full round-trip — GET_AGENT_CARD / AGENT
 > / CANCEL_AGENT, incl. FORK_JOIN and DO_WHILE — is live-confirmed.
 
 # AGENT task family (A2A) — Capability Checks
