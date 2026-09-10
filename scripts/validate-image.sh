@@ -21,6 +21,9 @@
 #   scripts/validate-image.sh --ref release/3.32.x
 #   scripts/validate-image.sh --ref v3.32.4 --stages build,health
 #   scripts/validate-image.sh --ref release/3.32.x --port 8090 --stages all
+#   # validate a PUBLISHED image (pulls it; run on amd64 AND arm64 hosts):
+#   scripts/validate-image.sh --image conductoross/conductor:3.32.4 \
+#       --stages build,health,kitchen-sink,sdk-python,sdk-js,cli
 #
 # Config (env overridable; defaults target loki):
 #   CONDUCTOR_REPO   conductor checkout to build from   (~/projects/git/conductor)
@@ -56,22 +59,26 @@ KNOWN_FLAKY_RE='NestedForkJoinSubWorkflowSpec|HierarchicalForkJoinSubworkflow|Su
 KNOWN_ENVIRONMENTAL_RE='GrpcEndToEndTest|HttpEndToEndTest|ExternalPayloadStorageE2E|S3ExternalPayloadStorage|SQSEventQueue'
 
 # ── args ─────────────────────────────────────────────────────────────────────
-REF=""; PORT=8090; STAGES="all"; RUNDIR=""
+# --image <tag> validates a PREBUILT/published image (docker pull if absent)
+# instead of building from --ref. Use it post-publish to verify the real
+# multi-arch artifact: run it on an amd64 host AND an arm64 host to cover both.
+REF=""; PORT=8090; STAGES="all"; RUNDIR=""; IMAGE_OVERRIDE=""
 while [[ $# -gt 0 ]]; do case "$1" in
   --ref)     REF="$2"; shift 2;;
+  --image)   IMAGE_OVERRIDE="$2"; shift 2;;
   --port)    PORT="$2"; shift 2;;
   --stages)  STAGES="$2"; shift 2;;
   --rundir)  RUNDIR="$2"; shift 2;;
-  -h|--help) sed -n '2,40p' "$0"; exit 0;;
+  -h|--help) sed -n '2,45p' "$0"; exit 0;;
   *) echo "unknown arg: $1" >&2; exit 2;;
 esac; done
 
 UI_PORT=$((PORT + 1))
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
-REF_TAG="$(echo "${REF:-noref}" | tr '/' '-' | tr -cd 'A-Za-z0-9._-')"
+REF_TAG="$(echo "${REF:-${IMAGE_OVERRIDE:-noref}}" | tr '/:' '--' | tr -cd 'A-Za-z0-9._-')"
 RUNDIR="${RUNDIR:-$HARNESS_DIR/runs/${TS}-${REF_TAG}}"
 mkdir -p "$RUNDIR"
-IMAGE="conductor:validate-${REF_TAG}"
+IMAGE="${IMAGE_OVERRIDE:-conductor:validate-${REF_TAG}}"
 CONTAINER="conductor-validate-${PORT}"
 API="http://localhost:${PORT}"
 
@@ -146,10 +153,11 @@ preflight() {
         && ok "installed $(docker compose version 2>&1 | head -1)" || bad "compose v2 install failed"
     else ok "docker compose $(docker compose version --short 2>/dev/null)"; fi
   fi
-  # Sync the conductor checkout to the requested ref.
-  if have_stage build || have_stage local; then
+  # Sync the conductor checkout to the requested ref — only when building from
+  # source (skipped entirely in --image mode unless the local test stage is run).
+  if have_stage local || { have_stage build && [[ -z "$IMAGE_OVERRIDE" ]]; }; then
     [[ -d "$CONDUCTOR_REPO/.git" ]] || { bad "no conductor checkout at $CONDUCTOR_REPO"; record preflight FAIL "no conductor repo"; return 1; }
-    [[ -n "$REF" ]] || { bad "--ref required for build/local stages"; record preflight FAIL "no --ref"; return 1; }
+    [[ -n "$REF" ]] || { bad "--ref required to build from source (or pass --image)"; record preflight FAIL "no --ref"; return 1; }
     # Fetch the exact ref (branch OR tag) into FETCH_HEAD and detach onto it;
     # --force discards any dirty tree left by a prior gradle build.
     ( cd "$CONDUCTOR_REPO" && git fetch --quiet origin "$REF" && git checkout --quiet --force --detach FETCH_HEAD ) \
@@ -236,6 +244,19 @@ PY
 # ── Stage 2: build image ──────────────────────────────────────────────────────
 build_image() {
   have_stage build || return 0
+  # --image mode: validate a prebuilt/published image — pull if not already local.
+  if [[ -n "$IMAGE_OVERRIDE" ]]; then
+    log "build image" "using provided image $IMAGE (pull if absent)"
+    docker image inspect "$IMAGE" >/dev/null 2>&1 || docker pull "$IMAGE" > "$RUNDIR/docker-pull.log" 2>&1
+    if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+      local d; d=$(docker image inspect "$IMAGE" --format '{{.Id}}' 2>/dev/null)
+      local arch; arch=$(docker image inspect "$IMAGE" --format '{{.Architecture}}' 2>/dev/null)
+      ok "using $IMAGE ($arch, ${d:0:19})"; record build PASS "provided $IMAGE $arch $d"
+    else
+      bad "cannot pull $IMAGE (see docker-pull.log)"; record build FAIL "pull failed"; return 1
+    fi
+    return 0
+  fi
   log "build image" "$IMAGE from $REF"
   ( cd "$CONDUCTOR_REPO" && docker build -f docker/server/Dockerfile -t "$IMAGE" . ) \
     > "$RUNDIR/docker-build.log" 2>&1
