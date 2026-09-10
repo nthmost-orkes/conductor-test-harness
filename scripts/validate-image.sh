@@ -44,7 +44,7 @@ NODE_VERSION="${NODE_VERSION:-20.18.1}"
 
 # Stages that run under --stages all. Go is retired (its integration suite is
 # Orkes-version-gated → near-zero OSS coverage); still runnable via --stages sdk-go.
-ALL_STAGES="local,build,health,kitchen-sink,sdk-python,sdk-js"
+ALL_STAGES="local,build,health,kitchen-sink,sdk-python,sdk-js,cli"
 
 # Known-flaky test-harness specs (see PLANNING/test-system-redesign-plan.md).
 # Failures in these are re-run once and reported as WARN, never a real FAIL.
@@ -121,7 +121,7 @@ preflight() {
   fi
   # Node 20 + npm (for sdk-js): loki ships node 18 without npm; install a full
   # node tarball to $HOME/.local/node (no sudo) when npm is absent or node < 20.
-  if have_stage sdk-js; then
+  if have_stage sdk-js || have_stage cli; then
     export PATH="$HOME/.local/node/bin:$PATH"   # find a prior install before deciding to reinstall
     if ! command -v npm >/dev/null || ! node -e 'process.exit(+process.versions.node.split(".")[0]>=20?0:1)' 2>/dev/null; then
       log "preflight" "installing Node ${NODE_VERSION} to \$HOME/.local/node (no sudo)"
@@ -249,7 +249,7 @@ build_image() {
 
 # ── Stage 3: boot + health ─────────────────────────────────────────────────────
 boot_health() {
-  have_stage health || have_stage kitchen-sink || have_stage sdk-python || have_stage sdk-go || return 0
+  have_stage health || have_stage kitchen-sink || have_stage sdk-python || have_stage sdk-go || have_stage cli || return 0
   pick_ports || { bad "no free port pair from :$PORT"; record health FAIL "no free ports"; return 1; }
   log "boot + health" "$CONTAINER on :$PORT (api) / :$UI_PORT (ui)"
   docker rm -f "$CONTAINER" >/dev/null 2>&1
@@ -388,6 +388,20 @@ sdk_js() {
   esac
 }
 
+cli_smoke() {
+  have_stage cli || return 0
+  log "cli" "conductor-cli OSS smoke vs $API/api (Orkes-only self-gated via --server-type OSS)"
+  export PATH="$HOME/.local/node/bin:$PATH"
+  CLI_BIN="${CLI_BIN:-}" SERVER_API="$API/api" RUNDIR="$RUNDIR" HARNESS_DIR="$HARNESS_DIR" \
+    bash "$HARNESS_DIR/sdk-smoke/cli/run.sh" > "$RUNDIR/cli.log" 2>&1
+  local rc=$?
+  case $rc in
+    0) ok "cli OSS smoke passed"; record cli PASS "$(grep -m1 '^tests=' "$RUNDIR/cli.log")";;
+    2) bad "cli inconclusive (CLI unavailable / server unreachable)"; record cli WARN "inconclusive; see cli.log";;
+    *) bad "cli real failures (see cli.log)"; record cli FAIL "$(grep -m1 '^tests=' "$RUNDIR/cli.log")";;
+  esac
+}
+
 teardown() { docker rm -f "$CONTAINER" >/dev/null 2>&1 && log "teardown" "removed $CONTAINER"; }
 
 # ── Stage 6: report ────────────────────────────────────────────────────────────
@@ -426,6 +440,7 @@ build_image || { report; exit 1; }
 boot_health || { report; exit 1; }
 kitchen_sink
 sdk_python
+cli_smoke
 sdk_js
 sdk_go
 report

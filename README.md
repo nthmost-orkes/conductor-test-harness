@@ -105,6 +105,7 @@ scripts/validate-image.sh --ref release/3.32.x --port 8090 --stages all
 | `kitchen-sink` | raw-REST task-type battery vs the container, diffed against baseline | regression vs prior battery report |
 | `sdk-python` | `python-sdk` `tests/integration` core bucket (keyless OSS; Orkes-only excluded via `oss-skip.txt`) | real SDK failure (not a known issue) |
 | `sdk-js` | `javascript-sdk` `test:integration:oss` on the SDK's own compose stack (our image + postgres + httpbin); Orkes-only auto-gated upstream | real SDK failure (not a known issue) |
+| `cli` | `conductor-cli` (the `conductor` binary) OSS smoke: task/workflow CRUD, a real register→start→poll(COMPLETED) execution, and a positive Orkes-gating check; Orkes-only self-gated via `--server-type OSS` | real CLI failure |
 
 `sdk-go` exists but is **retired from `all`** (its `integration_tests` gate almost everything behind `RequireAtLeast(v4.1)` → near-zero OSS coverage). Still runnable via `--stages sdk-go` if needed.
 
@@ -116,7 +117,8 @@ out of the verdict:
 
 - **Upstream gating (best case)** — the JS SDK's `test:integration:oss` sets
   `CONDUCTOR_SERVER_TYPE=oss`, so its `describeForOrkesOnly*` blocks auto-skip
-  Orkes-only tests. No skip list to maintain on our side.
+  Orkes-only tests; the CLI likewise self-gates Orkes-only commands under
+  `--server-type OSS`. No skip list to maintain on our side.
 - **Skip lists** (`sdk-smoke/<lang>/oss-skip.txt`) — for SDKs without upstream
   gating (Python), enterprise surfaces (RBAC, secrets, gateway) that don't exist
   on OSS and would 404. Excluded via pytest `-k`.
