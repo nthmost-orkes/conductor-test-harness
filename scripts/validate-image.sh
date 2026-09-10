@@ -430,7 +430,7 @@ report() {
   local overall=PASS
   for s in "${order[@]}"; do [[ "${VERDICT[$s]}" == FAIL ]] && overall=FAIL; done
   {
-    echo "# Docker image validation — ${REF:-?} ($TS)"
+    echo "# Docker image validation — ${REF:-$IMAGE} ($TS)"
     echo
     echo "- **Image:** \`$IMAGE\`"
     echo "- **Host:** $(hostname)"
