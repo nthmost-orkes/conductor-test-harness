@@ -126,9 +126,11 @@ out of the verdict:
   concrete test names to add here — that triage is the point, not a bug in the
   battery.
 
-Verdicts: **PASS** / **WARN** (known-flaky or inconclusive — e.g. server
-unreachable so everything skipped) / **FAIL** (image-related). Each run writes
-`runs/<ts>-<ref>/REPORT.md` + `report.json` plus all stage logs.
+Verdicts: **PASS** / **WARN** (non-blocking: known-flaky specs, environmental
+E2E specs that need testcontainers/infra, or inconclusive — e.g. server
+unreachable so everything skipped) / **FAIL** (image-related). WARN never fails
+the overall verdict. Each run writes `runs/<ts>-<ref>/REPORT.md` + `report.json`
+plus all stage logs.
 
 ---
 

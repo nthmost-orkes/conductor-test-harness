@@ -50,6 +50,11 @@ ALL_STAGES="local,build,health,kitchen-sink,sdk-python,sdk-js"
 # Failures in these are re-run once and reported as WARN, never a real FAIL.
 KNOWN_FLAKY_RE='NestedForkJoinSubWorkflowSpec|HierarchicalForkJoinSubworkflow|SubWorkflowRestartSpec|ExternalPayloadStorageSpec'
 
+# E2E specs that need external infra (testcontainers ES/localstack, gRPC port
+# binding, httpbin, AWS). Failures here are environmental, not image bugs, so
+# they're reported WARN — a plain build host can't satisfy them.
+KNOWN_ENVIRONMENTAL_RE='GrpcEndToEndTest|HttpEndToEndTest|ExternalPayloadStorageE2E|S3ExternalPayloadStorage|SQSEventQueue'
+
 # ── args ─────────────────────────────────────────────────────────────────────
 REF=""; PORT=8090; STAGES="all"; RUNDIR=""
 while [[ $# -gt 0 ]]; do case "$1" in
@@ -188,36 +193,43 @@ local_tests() {
   ( cd "$CONDUCTOR_REPO" && ./gradlew clean build --console=plain ) \
     > "$RUNDIR/gradle-build.log" 2>&1
   local rc=$?
-  # Scan JUnit XML for failing test classes; classify against known-flaky set.
-  python3 - "$CONDUCTOR_REPO" "$KNOWN_FLAKY_RE" > "$RUNDIR/gradle-failures.json" <<'PY'
+  # Scan JUnit XML for failing test classes; classify env → flaky → real.
+  python3 - "$CONDUCTOR_REPO" "$KNOWN_FLAKY_RE" "$KNOWN_ENVIRONMENTAL_RE" > "$RUNDIR/gradle-failures.json" <<'PY'
 import sys, glob, re, json, xml.etree.ElementTree as ET
-repo, flaky_re = sys.argv[1], re.compile(sys.argv[2])
-real, flaky = set(), set()
+repo = sys.argv[1]
+flaky_re, env_re = re.compile(sys.argv[2]), re.compile(sys.argv[3])
+real, flaky, env = set(), set(), set()
 for f in glob.glob(f"{repo}/**/build/test-results/**/*.xml", recursive=True):
     try: root = ET.parse(f).getroot()
     except Exception: continue
     for tc in root.iter("testcase"):
         if any(c.tag in ("failure","error") for c in tc):
             cls = tc.get("classname","")
-            (flaky if flaky_re.search(cls) else real).add(cls)
-print(json.dumps({"real": sorted(real), "flaky": sorted(flaky)}, indent=2))
+            if env_re.search(cls):    env.add(cls)
+            elif flaky_re.search(cls): flaky.add(cls)
+            else:                      real.add(cls)
+print(json.dumps({"real": sorted(real), "flaky": sorted(flaky),
+                  "environmental": sorted(env)}, indent=2))
 PY
-  local real flaky
+  local real flaky env
   real=$(python3 -c 'import json,sys;print(len(json.load(open(sys.argv[1]))["real"]))' "$RUNDIR/gradle-failures.json")
   flaky=$(python3 -c 'import json,sys;print(len(json.load(open(sys.argv[1]))["flaky"]))' "$RUNDIR/gradle-failures.json")
+  env=$(python3 -c 'import json,sys;print(len(json.load(open(sys.argv[1]))["environmental"]))' "$RUNDIR/gradle-failures.json")
   if (( rc == 0 )); then
     ok "gradle build passed"; record local PASS "raw=PASS"
   elif (( real == 0 )) && (( flaky > 0 )); then
-    bad "only known-flaky specs failed ($flaky) — re-running once"
+    bad "non-real failures: $flaky known-flaky, $env environmental — re-running test-harness once"
     ( cd "$CONDUCTOR_REPO" && ./gradlew :conductor-test-harness:test --console=plain ) \
       >> "$RUNDIR/gradle-build.log" 2>&1
     local rc2=$?
-    (( rc2 == 0 )) && record local PASS "raw=FAIL(flaky-only), rerun=PASS" \
-                   || record local WARN "known-flaky failed twice ($flaky specs); no real failures"
-    (( rc2 == 0 )) && ok "clean on re-run" || bad "known-flaky still red (WARN, not image-related)"
+    (( rc2 == 0 )) && { ok "clean on re-run"; record local PASS "raw=FAIL(flaky/env only), rerun=PASS"; } \
+                   || { bad "flaky/env still red (WARN, not image-related)"; record local WARN "flaky=$flaky env=$env, no real failures"; }
+  elif (( real == 0 )) && (( env > 0 )); then
+    bad "only environmental E2E specs failed ($env) — need testcontainers/infra, not image-related"
+    record local WARN "environmental=$env (infra-dependent), no real/flaky failures"
   else
-    bad "real test failures: $real class(es), plus $flaky known-flaky"
-    record local FAIL "raw=FAIL, real=$real flaky=$flaky (see gradle-failures.json)"
+    bad "real test failures: $real class(es) (plus $flaky flaky, $env environmental)"
+    record local FAIL "raw=FAIL, real=$real flaky=$flaky env=$env (see gradle-failures.json)"
   fi
 }
 
