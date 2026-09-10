@@ -24,6 +24,9 @@
 #   # validate a PUBLISHED image (pulls it; run on amd64 AND arm64 hosts):
 #   scripts/validate-image.sh --image conductoross/conductor:3.32.4 \
 #       --stages build,health,kitchen-sink,sdk-python,sdk-js,cli
+#   # validate a specific arch locally via QEMU emulation (e.g. amd64 on an arm64 Mac):
+#   scripts/validate-image.sh --image conductoross/conductor:3.32.4 --platform linux/amd64 \
+#       --stages build,health,kitchen-sink,cli
 #
 # Config (env overridable; defaults target loki):
 #   CONDUCTOR_REPO   conductor checkout to build from   (~/projects/git/conductor)
@@ -62,13 +65,14 @@ KNOWN_ENVIRONMENTAL_RE='GrpcEndToEndTest|HttpEndToEndTest|ExternalPayloadStorage
 # --image <tag> validates a PREBUILT/published image (docker pull if absent)
 # instead of building from --ref. Use it post-publish to verify the real
 # multi-arch artifact: run it on an amd64 host AND an arm64 host to cover both.
-REF=""; PORT=8090; STAGES="all"; RUNDIR=""; IMAGE_OVERRIDE=""
+REF=""; PORT=8090; STAGES="all"; RUNDIR=""; IMAGE_OVERRIDE=""; PLATFORM=""
 while [[ $# -gt 0 ]]; do case "$1" in
-  --ref)     REF="$2"; shift 2;;
-  --image)   IMAGE_OVERRIDE="$2"; shift 2;;
-  --port)    PORT="$2"; shift 2;;
-  --stages)  STAGES="$2"; shift 2;;
-  --rundir)  RUNDIR="$2"; shift 2;;
+  --ref)      REF="$2"; shift 2;;
+  --image)    IMAGE_OVERRIDE="$2"; shift 2;;
+  --platform) PLATFORM="$2"; shift 2;;   # e.g. linux/amd64 — run a specific arch (QEMU-emulated if not native)
+  --port)     PORT="$2"; shift 2;;
+  --stages)   STAGES="$2"; shift 2;;
+  --rundir)   RUNDIR="$2"; shift 2;;
   -h|--help) sed -n '2,45p' "$0"; exit 0;;
   *) echo "unknown arg: $1" >&2; exit 2;;
 esac; done
@@ -246,11 +250,18 @@ build_image() {
   have_stage build || return 0
   # --image mode: validate a prebuilt/published image — pull if not already local.
   if [[ -n "$IMAGE_OVERRIDE" ]]; then
-    log "build image" "using provided image $IMAGE (pull if absent)"
-    docker image inspect "$IMAGE" >/dev/null 2>&1 || docker pull "$IMAGE" > "$RUNDIR/docker-pull.log" 2>&1
+    log "build image" "using provided image $IMAGE${PLATFORM:+ (platform $PLATFORM)}"
+    if [[ -n "$PLATFORM" ]]; then
+      docker pull --platform "$PLATFORM" "$IMAGE" > "$RUNDIR/docker-pull.log" 2>&1   # force the requested arch
+    else
+      docker image inspect "$IMAGE" >/dev/null 2>&1 || docker pull "$IMAGE" > "$RUNDIR/docker-pull.log" 2>&1
+    fi
     if docker image inspect "$IMAGE" >/dev/null 2>&1; then
       local d; d=$(docker image inspect "$IMAGE" --format '{{.Id}}' 2>/dev/null)
-      local arch; arch=$(docker image inspect "$IMAGE" --format '{{.Architecture}}' 2>/dev/null)
+      # With a multi-arch tag both variants may be cached, so a tag inspect reports
+      # the native arch — use the requested platform when one was pinned. The
+      # actual running arch is confirmed by uname in boot_health.
+      local arch; if [[ -n "$PLATFORM" ]]; then arch="${PLATFORM##*/} (emulated)"; else arch=$(docker image inspect "$IMAGE" --format '{{.Architecture}}' 2>/dev/null); fi
       ok "using $IMAGE ($arch, ${d:0:19})"; record build PASS "provided $IMAGE $arch $d"
     else
       bad "cannot pull $IMAGE (see docker-pull.log)"; record build FAIL "pull failed"; return 1
@@ -272,15 +283,16 @@ build_image() {
 boot_health() {
   have_stage health || have_stage kitchen-sink || have_stage sdk-python || have_stage sdk-go || have_stage cli || return 0
   pick_ports || { bad "no free port pair from :$PORT"; record health FAIL "no free ports"; return 1; }
-  log "boot + health" "$CONTAINER on :$PORT (api) / :$UI_PORT (ui)"
+  log "boot + health" "$CONTAINER on :$PORT (api) / :$UI_PORT (ui)${PLATFORM:+ [$PLATFORM, emulated]}"
   docker rm -f "$CONTAINER" >/dev/null 2>&1
-  if ! docker run -d --name "$CONTAINER" -p "${PORT}:8080" -p "${UI_PORT}:5000" "$IMAGE" \
+  if ! docker run -d ${PLATFORM:+--platform "$PLATFORM"} --name "$CONTAINER" -p "${PORT}:8080" -p "${UI_PORT}:5000" "$IMAGE" \
         > "$RUNDIR/docker-run.log" 2>&1; then
     bad "container failed to start:"; sed 's/^/    /' "$RUNDIR/docker-run.log"
     record health FAIL "docker run failed (see docker-run.log)"; return 1
   fi
-  local up=0
-  for _ in $(seq 1 60); do
+  local up=0 tries=60
+  [[ -n "$PLATFORM" ]] && tries=180   # emulated JVM boots far slower under QEMU
+  for _ in $(seq 1 $tries); do
     if curl -fsS "$API/health" 2>/dev/null | grep -q '"healthy":true'; then up=1; break; fi
     docker ps -q -f name="$CONTAINER" | grep -q . || { bad "container exited early"; break; }
     sleep 3
@@ -290,12 +302,15 @@ boot_health() {
     bad "server never became healthy (see container-boot.log)"; record health FAIL "no /health"; return 1
   fi
   ok "/health healthy"
+  # Ground-truth the running arch (esp. under --platform emulation).
+  local runarch; runarch=$(docker exec "$CONTAINER" uname -m 2>/dev/null)
+  [[ -n "$runarch" ]] && ok "container arch: $runarch${PLATFORM:+ (requested $PLATFORM)}"
   local ui; ui=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${UI_PORT}/" 2>/dev/null)
   local proxy; proxy=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${UI_PORT}/api/health" 2>/dev/null)
   [[ "$ui" == 200 ]] && ok "UI :$UI_PORT ($ui)" || bad "UI returned $ui"
   [[ "$proxy" == 200 ]] && ok "/api proxy ($proxy)" || bad "/api proxy returned $proxy"
-  [[ "$ui" == 200 && "$proxy" == 200 ]] && record health PASS "ui+proxy 200" \
-                                        || record health WARN "server healthy; ui=$ui proxy=$proxy"
+  [[ "$ui" == 200 && "$proxy" == 200 ]] && record health PASS "arch=$runarch, ui+proxy 200" \
+                                        || record health WARN "arch=$runarch, server healthy; ui=$ui proxy=$proxy"
 }
 
 # ── Stage 4: kitchen-sink ──────────────────────────────────────────────────────
