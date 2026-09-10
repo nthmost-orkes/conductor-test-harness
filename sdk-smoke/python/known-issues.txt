@@ -1,0 +1,14 @@
+# Python SDK — documented SDK/OSS mismatches (NOT image bugs).
+#
+# A failing test whose "classname.name" matches a line here is reported as
+# KNOWN-ISSUE and does NOT fail the battery. Guard for the "SDK never run
+# against OSS" problem.
+#
+# One regex per line, each citing the tracking issue. Seeded from
+# sdk/python/3.32.0-rc.9/ISSUES.md (#426–#432). The tests/integration core
+# bucket already excludes the AI/agent suites, so most of these won't be hit;
+# add concrete test names as the first live runs surface them.
+#
+# #427 — wait_until uses wrong key
+# #428 — deprecated dynamicForkJoinTasksParam still emitted
+# #4xx — NOOP / EXCLUSIVE_JOIN / AGENT builders missing

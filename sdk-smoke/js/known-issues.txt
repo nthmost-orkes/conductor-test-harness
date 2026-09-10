@@ -1,0 +1,14 @@
+# JavaScript SDK — documented SDK/OSS mismatches (NOT image bugs).
+#
+# A failing test whose "classname.name" matches a line here is reported as
+# KNOWN-ISSUE and does NOT fail the battery.
+#
+# Note: the JS SDK gates Orkes-only tests itself (describeForOrkesOnly* +
+# CONDUCTOR_SERVER_TYPE=oss), so those show up as SKIPPED, not failures — no
+# skip list is needed here. This file is only for genuine SDK defects that
+# fail against OSS. Seed from sdk/javascript/3.32.0-rc.9/ISSUES.md as the first
+# live runs reveal concrete test names.
+#
+# #135-#140 (forkTaskJoin empty joinOn, NOOP missing, readTimeOut type, SWITCH
+#            JS evaluator, missing enum values) — add specific test names here
+#            if a core (non-gated) test actually fails on OSS for one of these.

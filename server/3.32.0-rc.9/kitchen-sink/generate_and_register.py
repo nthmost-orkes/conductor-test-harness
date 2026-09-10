@@ -16,9 +16,9 @@ Usage:
   python3 generate_and_register.py --list       # list workflow names only
 """
 
-import json, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 
-CONDUCTOR_URL = "http://loki.local:8080"
+CONDUCTOR_URL = os.environ.get("CONDUCTOR_SERVER", "http://loki.local:8080")
 
 
 # ──────────────────────────────────────────────────────────────

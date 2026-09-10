@@ -11,11 +11,11 @@ Usage:
   python3 run_battery.py --concurrency=N  # parallel workflow limit (default 12)
 """
 
-import json, sys, time, urllib.request, urllib.error, threading
+import json, os, sys, time, urllib.request, urllib.error, threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
-CONDUCTOR   = "http://loki.local:8080"
+CONDUCTOR   = os.environ.get("CONDUCTOR_SERVER", "http://loki.local:8080")
 LLM_HEAVY   = "http://spartacus.local:4000"   # gemma3-27b
 LLM_FAST    = "http://loki.local:4000"         # gemma3-12b
 MODEL_HEAVY = "spartacus/gemma3-27b"
@@ -346,6 +346,15 @@ def main():
     if no_llm or not failures:
         if not failures:
             print("✓ All cases passed — no LLM analysis needed.")
+        # Always persist a report (even on all-pass / --no-llm) so downstream
+        # tooling — e.g. validate-image.sh — has an artifact to diff.
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        out = f"battery_report_{ts}.json"
+        with open(out, "w") as fh:
+            json.dump({"run_at": ts, "conductor": CONDUCTOR, "total": len(results),
+                       "passed": len(passed), "failed": len(failures),
+                       "results": results}, fh, indent=2)
+        print(f"\nFull report saved to {out}")
         return
 
     print("─" * 70)

@@ -69,6 +69,69 @@ Each `sdk/<language>/<server-version>/` directory contains:
 
 ---
 
+## Validating a Docker image (release gate)
+
+Before a server image ships (e.g. promoting a patch to `:latest`), run the image
+validation battery. It builds the image from a git ref, boots it, and runs the
+kitchen-sink + SDK smokes against the running container — a repeatable version of
+the manual build/boot/health check.
+
+**Runs on loki** (amd64, self-contained: docker, java 21, python, go). This laptop
+is arm64, so images are built on loki, not shipped from here. Drive it from the
+laptop; it rsyncs the harness over, runs there, and pulls the report back:
+
+```shell
+# full battery against a release branch
+scripts/run-on-loki.sh --ref release/3.32.x
+
+# fast path: just prove it builds + boots
+scripts/run-on-loki.sh --ref release/3.32.x --stages build,health
+```
+
+To run directly on a host that already has the toolchain (loki, or a suitably
+equipped laptop):
+
+```shell
+scripts/validate-image.sh --ref release/3.32.x --port 8090 --stages all
+```
+
+### Stages (`--stages a,b,c` or `all`)
+
+| Stage | What it does | FAIL means |
+|-------|--------------|-----------|
+| `local` | full `./gradlew build` incl. test-harness | real test failure (known-flaky specs → WARN, re-run once) |
+| `build` | `docker build` the server image from `<ref>` (JAR + UI from source) | Dockerfile/build broke |
+| `health` | boot on SQLite defaults; assert `/health` + UI/`/api` proxy on :5000 | image won't boot or serve |
+| `kitchen-sink` | raw-REST task-type battery vs the container, diffed against baseline | regression vs prior battery report |
+| `sdk-python` | `python-sdk` `tests/integration` core bucket (keyless OSS; Orkes-only excluded via `oss-skip.txt`) | real SDK failure (not a known issue) |
+| `sdk-js` | `javascript-sdk` `test:integration:oss` on the SDK's own compose stack (our image + postgres + httpbin); Orkes-only auto-gated upstream | real SDK failure (not a known issue) |
+
+`sdk-go` exists but is **retired from `all`** (its `integration_tests` gate almost everything behind `RequireAtLeast(v4.1)` → near-zero OSS coverage). Still runnable via `--stages sdk-go` if needed.
+
+### The SDK mismatch guard
+
+The SDKs were never all exercised against OSS, so a naive SDK e2e run surfaces
+SDK/OSS *mismatches* as if they were image bugs. Two mechanisms keep that noise
+out of the verdict:
+
+- **Upstream gating (best case)** — the JS SDK's `test:integration:oss` sets
+  `CONDUCTOR_SERVER_TYPE=oss`, so its `describeForOrkesOnly*` blocks auto-skip
+  Orkes-only tests. No skip list to maintain on our side.
+- **Skip lists** (`sdk-smoke/<lang>/oss-skip.txt`) — for SDKs without upstream
+  gating (Python), enterprise surfaces (RBAC, secrets, gateway) that don't exist
+  on OSS and would 404. Excluded via pytest `-k`.
+- **Known-issue lists** (`sdk-smoke/<lang>/known-issues.txt`) — documented SDK
+  defects (seeded from `sdk/<lang>/<ver>/ISSUES.md`). A failure matching one is
+  reported as **KNOWN-ISSUE**, not a FAIL. The first live runs will surface
+  concrete test names to add here — that triage is the point, not a bug in the
+  battery.
+
+Verdicts: **PASS** / **WARN** (known-flaky or inconclusive — e.g. server
+unreachable so everything skipped) / **FAIL** (image-related). Each run writes
+`runs/<ts>-<ref>/REPORT.md` + `report.json` plus all stage logs.
+
+---
+
 ## Capabilities Catalog
 
 The `server/<version>/capabilities.yaml` file is the machine-readable answer to "what does

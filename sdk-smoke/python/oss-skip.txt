@@ -1,0 +1,26 @@
+# Python SDK — test-class name fragments to EXCLUDE against a keyless OSS server.
+#
+# The python-sdk tests/integration "core" bucket bundles Orkes-enterprise CRUD
+# whose REST endpoints don't exist on OSS (they 404 with "No static resource
+# api/<x>"). These are neither image bugs nor SDK bugs — the tests target Orkes.
+# Excluding them is the mismatch guard for Python (analogous to the Go version
+# gates). Skipping is neutral in the report.
+#
+# One pytest -k name fragment per line (joined into `-k "not (a or b or ...)"`,
+# matched against the test's class/node id). Confirmed 404 on release/3.32.x
+# (2026-09-10 run); endpoints: api/applications, api/roles, api/groups,
+# api/users, api/schema, api/registry, api/tags, authorization.
+#
+# NOTE: api/schema is OSS as of #1592 (server 3.33+). When validating a 3.33+
+# image, drop SchemaClient from this list so schema coverage runs.
+#
+OrkesAuthorization
+SchemaClient
+RolesAndPermissions
+ApplicationManagement
+AccessKeyManagement
+GroupManagement
+UserManagement
+Permissions
+APIGateway
+ServiceRegistry

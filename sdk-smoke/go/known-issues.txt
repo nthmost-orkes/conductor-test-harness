@@ -1,0 +1,19 @@
+# Go SDK — documented SDK/OSS mismatches (NOT image bugs).
+#
+# A test failure whose name matches a line here is reported as KNOWN-ISSUE and
+# does NOT fail the battery. This is the guard for the "SDK was never run against
+# OSS" problem: known SDK defects surface as classified noise, not image
+# regressions.
+#
+# One Go test-name regex per line. Each MUST cite the tracking issue.
+# Seeded from sdk/go/3.32.0-rc.9/ISSUES.md — add rows as the first live runs
+# reveal which integration tests actually hit these paths.
+#
+# #263/#264 — Fork/DynamicFork auto-JOIN emits empty joinOn → JOIN completes
+#             immediately. Any fork/join integration test may fail on OSS for
+#             this SDK reason. Uncomment/adjust once the exact test name is seen:
+# TestFork
+# TestDynamicFork
+#
+# #262 — HttpInput wrong JSON field casing → server ignores SDK timeouts.
+#        Only fails a test that asserts the timeout took effect.

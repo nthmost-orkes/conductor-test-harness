@@ -11,3 +11,6 @@ providers/secrets.env
 
 # Local test-server run dir (jars, sqlite, logs)
 .run/
+
+# Docker image validation runs (validate-image.sh output)
+runs/

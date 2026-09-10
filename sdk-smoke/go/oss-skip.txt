@@ -1,0 +1,23 @@
+# Go SDK — test-name regexes to SKIP against a keyless OSS server.
+#
+# These are Orkes-enterprise surfaces (RBAC, secrets, gateway, integrations)
+# that are absent from OSS. Most already self-skip via RequireAtLeast(version),
+# so this list is belt-and-suspenders: it keeps a *missing* self-skip from
+# red-flagging the battery. Skipping is neutral in the report.
+#
+# One Go test-name regex per line (joined with `|` into `go test -skip`).
+# Blank lines and #-comments ignored. Widen/narrow as OSS gains features.
+# Cross-reference: sdk/go/<ver>/ISSUES.md, and the RequireAtLeast gates in
+# go-sdk/test/integration_tests/*_test.go.
+#
+# NOTE: the go-sdk integration suite already gates almost every enterprise test
+# behind RequireAtLeast(VersionResourceV41) — against an OSS server (version <
+# 4.1) they self-skip. So NO active skip patterns are needed here, and adding
+# broad ones (e.g. TestIntegration) risks hiding genuine core coverage. Left
+# empty on purpose; add a specific regex only if a real Orkes-only test is found
+# NOT to self-skip and to hard-fail on OSS.
+#
+# (enterprise groups, for reference — already self-skipping, do not enable
+#  unless proven necessary:)
+# TestApplication  TestAuthorization  TestApiGateway  TestServiceRegistry
+# TestSecret  TestWebhook  TestEnvironment  TestGroup  TestUser  TestIntegration
